@@ -444,6 +444,20 @@ tr:last-child td { border-bottom: 0; }
 
 ul { margin: 8px 0 0; padding-left: 20px; }
 
+.mobile-tabs { display: none; }
+
+.student-toggle {
+  display: none;
+  background: transparent;
+  border: 0;
+  min-height: 28px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 @media (max-width: 1240px) {
   .shell {
     height: auto;
@@ -457,6 +471,62 @@ ul { margin: 8px 0 0; padding-left: 20px; }
     overflow: visible;
   }
   main { overflow: visible; }
+
+  .mobile-tabs {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile-tabs button {
+    flex: 1;
+    min-height: 44px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 800;
+    padding: 0;
+  }
+  .mobile-tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  body[data-active-tab="input"] main { display: none; }
+  body[data-active-tab="input"] aside { display: block; }
+
+  body[data-active-tab="schedule"] aside { display: none; }
+  body[data-active-tab="schedule"] #saved-section { display: none; }
+
+  body[data-active-tab="saved"] aside { display: none; }
+  body[data-active-tab="saved"] #status,
+  body[data-active-tab="saved"] #metrics,
+  body[data-active-tab="saved"] #grid-section,
+  body[data-active-tab="saved"] #assignments-section,
+  body[data-active-tab="saved"] #students-section { display: none; }
+
+  .student-toggle { display: inline-grid; place-items: center; }
+  .student-head {
+    grid-template-columns: 28px minmax(0, 1fr) 70px;
+    align-items: center;
+  }
+  .student-head .field label { display: none; }
+  .student-head .student-name { padding: 8px 10px; font-weight: 700; }
+  .student-head .weekly-count { padding: 8px 10px; text-align: center; }
+  .student-head .remove-student {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .student-card.collapsed > :not(.student-head) { display: none; }
+  .student-card.collapsed .remove-student { display: none; }
+  .student-card.collapsed .student-toggle::before { content: "▸"; }
+  .student-card:not(.collapsed) .student-toggle::before { content: "▾"; }
 }
 
 @media (max-width: 920px) {
@@ -464,12 +534,75 @@ ul { margin: 8px 0 0; padding-left: 20px; }
 }
 
 @media (max-width: 760px) {
-  aside, main { padding: 16px; }
-  .settings, .student-head { grid-template-columns: 1fr; }
+  aside, main { padding: 12px; }
+  .settings { grid-template-columns: 1fr; }
   .condition-row { grid-template-columns: 1fr; }
+
+  main { padding: 8px; }
+  #grid-section.panel {
+    padding: 10px 4px 4px;
+  }
+  #grid-section h2 { padding: 0 8px; }
+
+  .schedule {
+    min-width: 0;
+    --hour-height: 64px;
+  }
+  .schedule-header, .schedule-body {
+    grid-template-columns: 50px repeat(7, minmax(0, 1fr));
+  }
+  .schedule-wrap {
+    overflow: hidden;
+    border-radius: 6px;
+  }
+  .schedule-head {
+    height: 32px;
+    padding: 6px 2px;
+    font-size: 12px;
+    text-align: center;
+  }
+  .schedule-time {
+    padding: 4px 4px;
+    font-size: 10.5px;
+    text-align: right;
+    line-height: 1.2;
+  }
+  .schedule-event {
+    left: 1.5px;
+    right: 1.5px;
+    padding: 4px 4px;
+    font-size: 10.5px;
+    line-height: 1.2;
+    min-height: 26px;
+    border-radius: 6px;
+    text-align: center;
+    word-break: keep-all;
+  }
+  .schedule-event small {
+    display: none;
+  }
+  .event-delete {
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    min-height: 16px;
+    font-size: 11px;
+    opacity: 1;
+  }
+  .resize-handle { height: 14px; }
+
+  .schedule-event.long-press-armed {
+    transform: scale(1.06);
+    box-shadow: 0 6px 14px rgba(23, 32, 42, 0.18);
+    z-index: 3;
+  }
 }
 
 @media (max-width: 520px) {
   .actions button, .top-actions button, .condition-row button { width: 100%; }
   .metrics { grid-template-columns: 1fr; }
+
+  .schedule-event { font-size: 10px; padding: 3px 3px; }
+  .schedule-time { font-size: 10px; }
 }

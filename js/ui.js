@@ -87,9 +87,10 @@ function addStudentCard(student = {}) {
   card.dataset.studentId = String(id);
   card.innerHTML = `
     <div class="student-head">
+      <button class="student-toggle" type="button" aria-label="펼치기/접기"></button>
       <div class="field">
         <label for="name-${id}">이름</label>
-        <input id="name-${id}" class="student-name" value="${escapeAttr(student.name || "")}" />
+        <input id="name-${id}" class="student-name" value="${escapeAttr(student.name || "")}" placeholder="이름" />
       </div>
       <div class="field">
         <label for="count-${id}">주 횟수</label>
@@ -112,6 +113,9 @@ function addStudentCard(student = {}) {
     if (!studentsInput.children.length) addStudentCard();
   });
   card.querySelector(".add-condition").addEventListener("click", () => addConditionRow(conditions));
+  card.querySelector(".student-toggle").addEventListener("click", () => {
+    card.classList.toggle("collapsed");
+  });
 
   studentsInput.appendChild(card);
   return card;
@@ -279,7 +283,11 @@ function clampAssignmentTimes(start, end) {
 }
 
 function hourLabel(hour) {
-  return `${String(hour).padStart(2, "0")}:00`;
+  const h = ((hour % 24) + 24) % 24;
+  if (h === 0) return "오전 12시";
+  if (h === 12) return "오후 12시";
+  if (h < 12) return `오전 ${h}시`;
+  return `오후 ${h - 12}시`;
 }
 
 function renderGrid(assignments) {
@@ -412,6 +420,34 @@ async function addFixedAssignmentFromClick(event) {
   setStatus("", "고정 수업 추가됨", `${item.day} ${item.start}-${item.end} ${item.name}`);
 }
 
+const LONG_PRESS_MS = 350;
+const LONG_PRESS_CANCEL_PX = 8;
+let longPressTimer = null;
+let longPressArmedEl = null;
+
+function clearLongPress() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+  if (longPressArmedEl) {
+    longPressArmedEl.classList.remove("long-press-armed");
+    longPressArmedEl = null;
+  }
+}
+
+function beginDrag(eventEl, item, index, resizing, pointerEvent) {
+  dragState = {
+    index,
+    resizing,
+    pointerY: pointerEvent.clientY,
+    start: timeToMinutes(item.start),
+    end: timeToMinutes(item.end),
+    day: item.day,
+  };
+  eventEl.setPointerCapture?.(pointerEvent.pointerId);
+}
+
 function startScheduleDrag(event) {
   if (event.target.dataset.delete) return;
   const eventEl = event.target.closest(".schedule-event");
@@ -420,17 +456,49 @@ function startScheduleDrag(event) {
   const item = latestAssignments[index];
   if (!item) return;
 
-  event.preventDefault();
   const resizing = Boolean(event.target.dataset.resize);
-  dragState = {
-    index,
-    resizing,
-    pointerY: event.clientY,
-    start: timeToMinutes(item.start),
-    end: timeToMinutes(item.end),
-    day: item.day,
+  const isTouch = event.pointerType === "touch";
+
+  if (!isTouch || resizing) {
+    event.preventDefault();
+    beginDrag(eventEl, item, index, resizing, event);
+    return;
+  }
+
+  // 터치 + 일반 이동: long-press 로 진입
+  const startX = event.clientX;
+  const startY = event.clientY;
+  longPressArmedEl = eventEl;
+
+  const onMove = (e) => {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.hypot(dx, dy) > LONG_PRESS_CANCEL_PX) {
+      cleanup();
+    }
   };
-  eventEl.setPointerCapture?.(event.pointerId);
+  const onEnd = () => cleanup();
+  const cleanup = () => {
+    clearLongPress();
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onEnd);
+    window.removeEventListener("pointercancel", onEnd);
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onEnd);
+  window.addEventListener("pointercancel", onEnd);
+
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null;
+    if (longPressArmedEl !== eventEl) return;
+    eventEl.classList.add("long-press-armed");
+    navigator.vibrate?.(15);
+    suppressScheduleClick = true;
+    beginDrag(eventEl, item, index, resizing, event);
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onEnd);
+    window.removeEventListener("pointercancel", onEnd);
+  }, LONG_PRESS_MS);
 }
 
 function moveScheduleDrag(event) {
@@ -462,6 +530,10 @@ function moveScheduleDrag(event) {
 
 function endScheduleDrag() {
   dragState = null;
+  if (longPressArmedEl) {
+    longPressArmedEl.classList.remove("long-press-armed");
+    longPressArmedEl = null;
+  }
 }
 
 function wireScheduleInteractions() {
@@ -560,6 +632,7 @@ function loadSavedSchedule(id) {
   renderGrid(latestAssignments);
   syncEditedAssignments();
   setStatus("success", "시간표 불러옴", item.title);
+  setActiveTab("schedule");
 }
 
 function deleteSavedSchedule(id) {
@@ -657,6 +730,7 @@ form.addEventListener("submit", (event) => {
     try {
       const data = generateSchedule(getPayload());
       renderResult(data);
+      if (data.success) setActiveTab("schedule");
     } catch (exc) {
       setStatus("error", "오류", exc.message || String(exc));
     }
@@ -680,6 +754,14 @@ excelButton.addEventListener("click", () => {
     setStatus("error", "엑셀 저장 실패", exc.message || String(exc));
   }
 });
+
+const mobileTabs = document.querySelectorAll(".mobile-tabs button");
+function setActiveTab(name) {
+  document.body.dataset.activeTab = name;
+  mobileTabs.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === name));
+}
+mobileTabs.forEach((btn) => btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
+setActiveTab("input");
 
 setStudentCards([]);
 renderGrid([]);
