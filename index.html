@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#126d6a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="자동 시간표" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icons/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <title>자동 시간표 생성기</title>
+  </head>
+  <body>
+    <div id="text-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <div class="field">
+          <label id="text-modal-label" for="text-modal-input">일정 이름을 입력하세요.</label>
+          <input id="text-modal-input" />
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" id="text-modal-cancel">취소</button>
+          <button class="primary" type="button" id="text-modal-ok">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="shell">
+      <aside class="stack">
+        <div class="stack">
+          <h1>자동 시간표 생성기</h1>
+          <p class="muted">학생별 가능 시간과 주 횟수를 넣으면 겹치지 않는 주간 시간표를 만듭니다.</p>
+        </div>
+
+        <form id="schedule-form" class="stack">
+          <div class="top-actions">
+            <button class="secondary" type="button" id="add-student-button">학생 추가</button>
+            <button class="secondary" type="button" id="sample-button">예시 적용</button>
+          </div>
+
+          <div id="students-input" class="students"></div>
+
+          <div class="settings">
+            <div class="field">
+              <label for="duration">트레이너 수업시간</label>
+              <input id="duration" name="duration_minutes" type="number" min="10" max="180" step="10" value="50" />
+            </div>
+            <div class="field">
+              <label for="step">시작 단위</label>
+              <input id="step" name="step_minutes" type="number" min="5" max="60" step="5" value="10" />
+            </div>
+            <div class="field">
+              <label for="first-start">첫 시작</label>
+              <input id="first-start" name="first_start_time" type="time" value="10:00" />
+            </div>
+            <div class="field">
+              <label for="last-start">마지막 시작</label>
+              <input id="last-start" name="last_start_time" type="time" value="23:00" />
+            </div>
+            <div class="field">
+              <label for="break-minutes">쉬는시간</label>
+              <input id="break-minutes" name="break_minutes" type="number" min="0" max="180" step="5" value="0" />
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="primary" type="submit">시간표 생성</button>
+            <button class="secondary" type="button" id="confirm-button" disabled>확정</button>
+            <button class="secondary" type="button" id="excel-button" disabled>엑셀 다운로드</button>
+          </div>
+        </form>
+      </aside>
+
+      <main class="layout">
+        <section id="status" class="panel status">
+          <strong>대기 중</strong>
+          <div class="muted">학생과 가능 조건을 추가한 뒤 시간표를 생성합니다.</div>
+        </section>
+
+        <section id="metrics" class="metrics hidden"></section>
+
+        <section id="grid-section" class="panel">
+          <div class="stack">
+            <h2>시간표</h2>
+            <div id="grid" class="schedule-wrap"></div>
+          </div>
+        </section>
+
+        <section id="assignments-section" class="panel hidden">
+          <div class="stack">
+            <h2>목록형 결과</h2>
+            <div id="assignments" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <section id="saved-section" class="panel">
+          <div class="stack">
+            <h2>시간표 관리</h2>
+            <div id="saved-list" class="saved-list"></div>
+          </div>
+        </section>
+
+        <section id="students-section" class="panel hidden">
+          <div class="stack">
+            <h2>입력 해석 결과</h2>
+            <div id="students" class="table-wrap"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./vendor/xlsx.full.min.js"></script>
+    <script type="module" src="./js/ui.js"></script>
+  </body>
+</html>
