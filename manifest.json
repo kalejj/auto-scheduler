@@ -1,7 +1,7 @@
 {
   "name": "자동 시간표 생성기",
   "short_name": "자동 시간표",
-  "description": "학생별 가능 시간과 주 횟수로 주간 시간표를 자동 생성",
+  "description": "회원별 가능 시간과 주 횟수로 주간 시간표를 자동 생성",
   "lang": "ko",
   "start_url": "./index.html",
   "scope": "./",

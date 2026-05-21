@@ -390,7 +390,7 @@ settingsModal.addEventListener("click", (e) => {
 });
 openSettingsBtn.addEventListener("click", openSettingsModal);
 
-// ===== Member (학생) card =====
+// ===== Member (회원) card =====
 
 function addStudentCard(student = {}) {
   studentId += 1;

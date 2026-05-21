@@ -74,7 +74,7 @@ export function generateSchedule(payload) {
     lastStartMin
   );
   if (errors.length) return { success: false, message: "입력값을 확인해야 합니다.", errors };
-  if (!students.length) return { success: false, message: "입력된 학생이 없습니다.", errors: [] };
+  if (!students.length) return { success: false, message: "입력된 회원이 없습니다.", errors: [] };
 
   const [fixedAssignments, fixedErrors] = parseFixedAssignments(
     payload.fixed_assignments || [],

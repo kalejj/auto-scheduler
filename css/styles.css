@@ -359,7 +359,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   color: var(--muted);
   padding-left: 4px;
 }
-.student-number::before { content: "학생 " counter(student); }
+.student-number::before { content: "회원 " counter(student); }
 
 .student-card-body {
   display: grid;
