@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#126d6a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="자동 시간표" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icons/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <title>자동 시간표 생성기</title>
+  </head>
+  <body>
+    <header class="app-bar">
+      <button class="app-bar-btn" type="button" id="open-drawer-btn">
+        <span aria-hidden="true">☰</span> 회원
+      </button>
+      <h1 class="app-title">자동 시간표</h1>
+      <div class="app-bar-right">
+        <button class="app-bar-icon-btn" type="button" id="open-settings-btn" aria-label="설정">⚙</button>
+        <button class="app-bar-btn primary" type="button" id="open-event-modal-btn">+ 일정</button>
+      </div>
+    </header>
+
+    <main class="schedule-main">
+      <div id="alert-banner" class="alert hidden" role="alert"></div>
+      <div id="grid" class="schedule-wrap"></div>
+      <div id="empty-hint" class="empty-hint hidden">
+        <p>입력 패널에서 회원을 추가하고 <strong>시간표 생성</strong>을 눌러 시작하세요.</p>
+        <button class="primary" type="button" id="empty-open-drawer-btn">입력 열기</button>
+      </div>
+    </main>
+
+    <nav class="action-bar" id="action-bar" aria-label="시간표 액션">
+      <button class="action-btn" type="button" id="regenerate-button">
+        <span class="action-icon">↻</span>
+        <span>재생성</span>
+      </button>
+      <button class="action-btn" type="button" id="confirm-button" disabled>
+        <span class="action-icon">✓</span>
+        <span>확정</span>
+      </button>
+      <button class="action-btn" type="button" id="excel-button" disabled>
+        <span class="action-icon">⤓</span>
+        <span>엑셀</span>
+      </button>
+      <button class="action-btn" type="button" id="clear-button" disabled>
+        <span class="action-icon">⟲</span>
+        <span>초기화</span>
+      </button>
+      <button class="action-btn" type="button" id="show-saved-btn">
+        <span class="action-icon">☰</span>
+        <span>저장됨</span>
+      </button>
+    </nav>
+
+    <aside class="drawer" id="drawer" aria-label="회원 관리 패널">
+      <header class="drawer-head">
+        <h2>회원 관리</h2>
+        <button class="icon-button drawer-close" type="button" id="close-drawer-btn" aria-label="닫기">×</button>
+      </header>
+
+      <form id="schedule-form" class="drawer-body">
+        <section class="drawer-section">
+          <div class="drawer-section-head">
+            <h3>회원 목록</h3>
+            <button class="ghost ghost-small" type="button" id="sample-button">예시 적용</button>
+          </div>
+          <div class="member-controls">
+            <input id="member-search" type="search" placeholder="회원 이름 검색…" autocomplete="off" />
+            <select id="member-sort">
+              <option value="name">이름순</option>
+              <option value="recent">최근 추가순</option>
+              <option value="remaining">PT 잔여 적은순</option>
+              <option value="active">활성 우선</option>
+            </select>
+          </div>
+          <div id="members-list" class="members-list"></div>
+          <button class="add-student-bottom" type="button" id="add-member-button">+ 회원 추가</button>
+        </section>
+
+        <input type="hidden" id="duration" name="duration_minutes" value="50" />
+        <input type="hidden" id="step" name="step_minutes" value="10" />
+        <input type="hidden" id="first-start" name="first_start_time" value="10:00" />
+        <input type="hidden" id="last-start" name="last_start_time" value="23:00" />
+        <input type="hidden" id="break-minutes" name="break_minutes" value="0" />
+      </form>
+
+      <footer class="drawer-foot">
+        <button class="primary submit-btn" type="submit" form="schedule-form">시간표 생성</button>
+      </footer>
+    </aside>
+    <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
+
+    <div class="bottom-sheet hidden" id="saved-sheet" aria-label="저장된 시간표">
+      <div class="bottom-sheet-handle"></div>
+      <header class="bottom-sheet-head">
+        <h2>저장된 시간표</h2>
+        <button class="icon-button" type="button" id="close-saved-btn" aria-label="닫기">×</button>
+      </header>
+      <div class="bottom-sheet-body">
+        <div id="saved-list" class="saved-list"></div>
+      </div>
+    </div>
+    <div class="bottom-sheet-backdrop hidden" id="saved-backdrop"></div>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite">
+      <span class="spinner hidden" id="toast-spinner"></span>
+      <span id="toast-text"></span>
+    </div>
+
+    <div id="text-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <div class="field">
+          <label id="text-modal-label" for="text-modal-input">일정 이름을 입력하세요.</label>
+          <input id="text-modal-input" />
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" id="text-modal-cancel">취소</button>
+          <button class="primary" type="button" id="text-modal-ok">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="event-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <h2 id="event-modal-title">고정 일정 추가</h2>
+        <div id="event-modal-error" class="modal-error hidden"></div>
+
+        <div id="event-modal-status-section" class="status-section hidden">
+          <div class="status-current">
+            <span class="muted">상태</span>
+            <span class="status-badge" id="event-modal-status-badge">진행 예정</span>
+          </div>
+          <div class="status-actions">
+            <button class="status-btn status-btn-completed" type="button" id="event-modal-mark-completed">✓ 완료</button>
+            <button class="status-btn status-btn-noshow" type="button" id="event-modal-mark-noshow">✗ 노쇼</button>
+            <button class="status-btn status-btn-cancelled" type="button" id="event-modal-mark-cancelled">— 취소</button>
+            <button class="status-btn status-btn-reset hidden" type="button" id="event-modal-mark-reset">↺ 되돌리기</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="event-modal-name">이름</label>
+          <input id="event-modal-name" placeholder="이름" />
+        </div>
+        <div class="field">
+          <label for="event-modal-day">요일</label>
+          <select id="event-modal-day">
+            <option value="월">월</option>
+            <option value="화">화</option>
+            <option value="수">수</option>
+            <option value="목">목</option>
+            <option value="금">금</option>
+            <option value="토">토</option>
+            <option value="일">일</option>
+          </select>
+        </div>
+        <div class="time-range">
+          <div class="field">
+            <label>시작</label>
+            <button type="button" class="time-button" id="event-modal-start" data-time="18:00">오후 6:00</button>
+          </div>
+          <div class="field">
+            <label>종료</label>
+            <button type="button" class="time-button" id="event-modal-end" data-time="18:50">오후 6:50</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="danger hidden" type="button" id="event-modal-delete">삭제</button>
+          <span class="modal-actions-spacer"></span>
+          <button class="secondary" type="button" id="event-modal-cancel">취소</button>
+          <button class="primary" type="button" id="event-modal-save">저장</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <h2>설정</h2>
+        <div class="field">
+          <label for="settings-duration">강사 수업시간(분)</label>
+          <input id="settings-duration" type="number" min="10" max="180" step="10" />
+        </div>
+        <div class="field">
+          <label for="settings-step">시작 단위(분)</label>
+          <input id="settings-step" type="number" min="5" max="60" step="5" />
+        </div>
+        <div class="time-range">
+          <div class="field">
+            <label>첫 시작</label>
+            <button type="button" class="time-button" id="settings-first" data-time="10:00">오전 10:00</button>
+          </div>
+          <div class="field">
+            <label>마지막 시작</label>
+            <button type="button" class="time-button" id="settings-last" data-time="23:00">오후 11:00</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="settings-break">쉬는시간(분)</label>
+          <input id="settings-break" type="number" min="0" max="180" step="5" />
+        </div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button class="secondary" type="button" id="settings-cancel">취소</button>
+          <button class="primary" type="button" id="settings-save">저장</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="member-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal member-modal-content stack">
+        <header class="member-modal-head">
+          <h2 id="member-modal-title">회원 추가</h2>
+          <button class="icon-button" type="button" id="member-modal-cancel" aria-label="닫기">×</button>
+        </header>
+        <div id="member-modal-error" class="modal-error hidden"></div>
+
+        <div class="member-modal-body">
+          <div class="field">
+            <label for="member-modal-name">이름</label>
+            <input id="member-modal-name" placeholder="회원 이름" />
+          </div>
+          <div class="field">
+            <label for="member-modal-phone">전화번호 <span class="muted-tag">선택</span></label>
+            <input id="member-modal-phone" type="tel" placeholder="010-0000-0000" inputmode="numeric" />
+          </div>
+          <div class="member-row-two">
+            <div class="field">
+              <label for="member-modal-count">주 횟수</label>
+              <input id="member-modal-count" type="number" min="1" max="7" step="1" value="2" />
+            </div>
+            <div class="field">
+              <label class="active-toggle-label">
+                <input type="checkbox" id="member-modal-active" checked />
+                <span>활성</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="member-section-divider">가능 시간대</div>
+          <div class="field">
+            <div id="member-modal-conditions" class="conditions"></div>
+            <button class="add-condition" type="button" id="member-modal-add-condition">+ 가능 시간 추가</button>
+          </div>
+
+          <div class="member-section-divider">회원권 <span class="muted-tag">선택</span></div>
+          <div class="field">
+            <label for="member-modal-plan-name">회원권 이름</label>
+            <input id="member-modal-plan-name" placeholder="예: PT 10회권" />
+          </div>
+          <div class="member-row-two">
+            <div class="field">
+              <label for="member-modal-total-count">총 횟수</label>
+              <input id="member-modal-total-count" type="number" min="0" step="1" placeholder="0" />
+            </div>
+            <div class="field">
+              <label for="member-modal-used-count">사용 횟수</label>
+              <input id="member-modal-used-count" type="number" min="0" step="1" placeholder="0" />
+            </div>
+          </div>
+          <div class="member-row-two">
+            <div class="field">
+              <label for="member-modal-price">가격 (원)</label>
+              <input id="member-modal-price" type="number" min="0" step="10000" placeholder="0" />
+            </div>
+            <div class="field">
+              <label for="member-modal-expires">만료일</label>
+              <input id="member-modal-expires" type="date" />
+            </div>
+          </div>
+
+          <div class="member-section-divider">메모 <span class="muted-tag">선택</span></div>
+          <div class="field">
+            <textarea id="member-modal-memo" rows="3" placeholder="특이사항, 부상 이력 등"></textarea>
+          </div>
+        </div>
+
+        <footer class="member-modal-foot">
+          <button class="danger hidden" type="button" id="member-modal-delete">회원 삭제</button>
+          <span class="modal-actions-spacer"></span>
+          <button class="primary" type="button" id="member-modal-save">저장</button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <h2 id="confirm-modal-title">확인</h2>
+        <div id="confirm-modal-message" class="muted"></div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button class="secondary" type="button" id="confirm-modal-cancel">취소</button>
+          <button class="primary" type="button" id="confirm-modal-ok">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="time-picker-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal time-picker-modal-content">
+        <h2 id="time-picker-title">시간 선택</h2>
+        <div class="time-wheels">
+          <div class="wheel-highlight"></div>
+          <div class="wheel" data-wheel="ampm"><div class="wheel-inner"></div></div>
+          <div class="wheel" data-wheel="hour"><div class="wheel-inner"></div></div>
+          <div class="wheel-sep">:</div>
+          <div class="wheel" data-wheel="minute"><div class="wheel-inner"></div></div>
+        </div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button class="ghost" type="button" id="time-picker-cancel">취소</button>
+          <button class="primary" type="button" id="time-picker-ok">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./vendor/xlsx.full.min.js"></script>
+    <script type="module" src="./js/ui.js"></script>
+  </body>
+</html>
