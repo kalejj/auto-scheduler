@@ -13,6 +13,7 @@ const sampleButton = document.querySelector("#sample-button");
 const confirmButton = document.querySelector("#confirm-button");
 const excelButton = document.querySelector("#excel-button");
 const addFixedButton = document.querySelector("#add-fixed-button");
+const regenerateButton = document.querySelector("#regenerate-button");
 const savedList = document.querySelector("#saved-list");
 
 const textModal = document.querySelector("#text-modal");
@@ -99,21 +100,24 @@ function addStudentCard(student = {}) {
   card.className = "student-card";
   card.dataset.studentId = String(id);
   card.innerHTML = `
-    <div class="student-head">
+    <header class="student-card-title">
       <button class="student-toggle" type="button" aria-label="펼치기/접기"></button>
-      <div class="field">
-        <label for="name-${id}">이름</label>
-        <input id="name-${id}" class="student-name" value="${escapeAttr(student.name || "")}" placeholder="이름" />
+      <span class="student-number"></span>
+      <button class="icon-button danger remove-student" type="button" aria-label="학생 삭제">×</button>
+    </header>
+    <div class="student-card-body">
+      <div class="student-head">
+        <div class="field">
+          <label for="name-${id}">이름</label>
+          <input id="name-${id}" class="student-name" value="${escapeAttr(student.name || "")}" placeholder="이름" />
+        </div>
+        <div class="field">
+          <label for="count-${id}">주 횟수</label>
+          <input id="count-${id}" class="weekly-count" type="number" min="1" max="7" step="1" value="${student.weekly_count || 1}" />
+        </div>
       </div>
-      <div class="field">
-        <label for="count-${id}">주 횟수</label>
-        <input id="count-${id}" class="weekly-count" type="number" min="1" max="7" step="1" value="${student.weekly_count || 1}" />
-      </div>
-      <button class="danger remove-student" type="button">학생 삭제</button>
-    </div>
-    <div class="conditions"></div>
-    <div>
-      <button class="ghost add-condition" type="button">조건 추가</button>
+      <div class="conditions"></div>
+      <button class="add-condition" type="button">+ 가능 시간 추가</button>
     </div>
   `;
 
@@ -140,8 +144,9 @@ function addConditionRow(container, condition = {}) {
   const row = document.createElement("div");
   row.className = "condition-row";
   row.innerHTML = `
+    <button class="icon-button danger remove-condition" type="button" aria-label="시간대 삭제">×</button>
     <div class="field">
-      <div class="label">요일</div>
+      <div class="label">가능 요일</div>
       <div class="days">
         ${DAYS.map((day) => {
           const checked = (condition.days || []).includes(day) ? "checked" : "";
@@ -149,15 +154,16 @@ function addConditionRow(container, condition = {}) {
         }).join("")}
       </div>
     </div>
-    <div class="field">
-      <label for="start-${id}">시작</label>
-      <input id="start-${id}" class="start-time" type="time" value="${condition.start_time || "18:00"}" />
+    <div class="time-range">
+      <div class="field">
+        <label for="start-${id}">시작</label>
+        <input id="start-${id}" class="start-time" type="time" value="${condition.start_time || "18:00"}" />
+      </div>
+      <div class="field">
+        <label for="end-${id}">종료</label>
+        <input id="end-${id}" class="end-time" type="time" value="${condition.end_time || "23:00"}" />
+      </div>
     </div>
-    <div class="field">
-      <label for="end-${id}">종료</label>
-      <input id="end-${id}" class="end-time" type="time" value="${condition.end_time || "23:00"}" />
-    </div>
-    <button class="danger remove-condition" type="button">조건 삭제</button>
   `;
   row.querySelector(".remove-condition").addEventListener("click", () => {
     row.remove();
@@ -291,7 +297,6 @@ function hourLabel(hour) {
 }
 
 function renderGrid(assignments) {
-  const hourHeight = 72;
   const firstSetting = timeToMinutes(document.querySelector("#first-start").value || "10:00");
   const lastSetting = timeToMinutes(document.querySelector("#last-start").value || "23:00");
   const duration = Number(document.querySelector("#duration").value) || 50;
@@ -302,6 +307,8 @@ function renderGrid(assignments) {
   const hours = [];
   for (let hour = firstHour; hour < lastHour; hour += 1) hours.push(hour);
 
+  const totalMinutes = (lastHour - firstHour) * 60 || 1;
+
   const eventsByDay = new Map(DAYS.map((day) => [day, []]));
   assignments.forEach((item, index) => {
     const start = timeToMinutes(item.start);
@@ -309,8 +316,8 @@ function renderGrid(assignments) {
     eventsByDay.get(item.day).push({
       ...item,
       index,
-      top: ((start - firstHour * 60) / 60) * hourHeight,
-      height: Math.max(((end - start) / 60) * hourHeight, 38),
+      topPct: ((start - firstHour * 60) / totalMinutes) * 100,
+      heightPct: ((end - start) / totalMinutes) * 100,
     });
   });
 
@@ -331,9 +338,10 @@ function renderGrid(assignments) {
           : event.source === "fixed"
             ? "schedule-event--fixed"
             : "schedule-event--generated";
+        const baseStyle = `top:${event.topPct}%;height:${event.heightPct}%`;
         const style = confirmedMode
-          ? `top:${event.top}px;height:${event.height}px;--event-bg:${bg};--event-ink:${ink}`
-          : `top:${event.top}px;height:${event.height}px`;
+          ? `${baseStyle};--event-bg:${bg};--event-ink:${ink}`
+          : baseStyle;
         return `
           <div class="schedule-event ${sourceClass}" data-index="${event.index}" style="${style}">
             ${escapeHtml(event.name)}
@@ -660,6 +668,7 @@ addStudentButton.addEventListener("click", () => {
 sampleButton.addEventListener("click", applySample);
 confirmButton.addEventListener("click", confirmCurrentSchedule);
 addFixedButton.addEventListener("click", () => openEventModal());
+regenerateButton.addEventListener("click", () => form.requestSubmit());
 ["duration", "step", "first-start", "last-start"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("change", () => renderGrid(latestAssignments));
 });

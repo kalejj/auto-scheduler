@@ -113,40 +113,130 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .ghost, .danger { min-height: 36px; padding: 0 10px; }
 .danger { color: var(--danger); }
 
-.students { display: grid; gap: 12px; }
+.students { display: grid; gap: 12px; counter-reset: student; }
 
 .student-card {
+  counter-increment: student;
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.student-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #f1f4f7;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-number {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+}
+.student-number::before { content: "학생 " counter(student); }
+
+.student-card-body {
   display: grid;
   gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
   padding: 12px;
-  background: #fbfcfd;
 }
 
 .student-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px;
-  gap: 10px;
-  align-items: end;
-}
-
-.student-head .danger { grid-column: 1 / -1; justify-self: start; }
-
-.conditions { display: grid; gap: 8px; }
-
-.condition-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) 80px;
   gap: 8px;
   align-items: end;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
 }
 
-.condition-row:first-child { border-top: 0; padding-top: 0; }
-.condition-row > .field:first-child { grid-column: 1 / -1; }
-.condition-row .danger { grid-column: 1 / -1; justify-self: start; }
+.conditions { display: grid; gap: 10px; }
+
+.condition-row {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.condition-row .remove-condition {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+.time-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  line-height: 1;
+}
+.icon-button:hover { background: rgba(101, 113, 127, 0.1); color: var(--ink); }
+.icon-button.danger:hover { background: rgba(180, 35, 24, 0.1); color: var(--danger); }
+
+.student-toggle {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+.student-card.collapsed .student-card-body { display: none; }
+.student-card.collapsed .student-toggle::before { content: "▸"; }
+.student-card:not(.collapsed) .student-toggle::before { content: "▾"; }
+
+.add-condition {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+.add-condition:hover { color: var(--accent); border-color: var(--accent); }
+
+.add-student-bottom {
+  width: 100%;
+  min-height: 42px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+.add-student-bottom:hover { color: var(--accent); border-color: var(--accent); background: rgba(18, 109, 106, 0.04); }
 
 .days {
   display: grid;
@@ -525,24 +615,7 @@ ul { margin: 8px 0 0; padding-left: 20px; }
   body[data-active-tab="saved"] #assignments-section,
   body[data-active-tab="saved"] #students-section { display: none; }
 
-  .student-toggle { display: inline-grid; place-items: center; }
-  .student-head {
-    grid-template-columns: 28px minmax(0, 1fr) 70px;
-    align-items: center;
-  }
-  .student-head .field label { display: none; }
-  .student-head .student-name { padding: 8px 10px; font-weight: 700; }
-  .student-head .weekly-count { padding: 8px 10px; text-align: center; }
-  .student-head .remove-student {
-    grid-column: 1 / -1;
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .student-card.collapsed > :not(.student-head) { display: none; }
-  .student-card.collapsed .remove-student { display: none; }
-  .student-card.collapsed .student-toggle::before { content: "▸"; }
-  .student-card:not(.collapsed) .student-toggle::before { content: "▾"; }
+  .student-head input { padding: 9px 10px; }
 }
 
 @media (max-width: 920px) {

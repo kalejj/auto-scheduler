@@ -81,11 +81,12 @@
 
         <form id="schedule-form" class="stack">
           <div class="top-actions">
-            <button class="secondary" type="button" id="add-student-button">학생 추가</button>
-            <button class="secondary" type="button" id="sample-button">예시 적용</button>
+            <button class="ghost" type="button" id="sample-button">예시 적용</button>
           </div>
 
           <div id="students-input" class="students"></div>
+
+          <button class="add-student-bottom" type="button" id="add-student-button">+ 학생 추가</button>
 
           <div class="settings">
             <div class="field">
@@ -129,6 +130,7 @@
               <button class="primary" type="button" id="add-fixed-button">+ 고정 일정 추가</button>
             </div>
             <div class="actions">
+              <button class="primary" type="button" id="regenerate-button">재생성</button>
               <button class="secondary" type="button" id="confirm-button" disabled>확정</button>
               <button class="secondary" type="button" id="excel-button" disabled>엑셀 다운로드</button>
             </div>
