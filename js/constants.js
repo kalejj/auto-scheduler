@@ -9,14 +9,14 @@ export const BREAK_MINUTES_DEFAULT = 0;
 export const TIME_LIMIT_SECONDS_DEFAULT = 5.0;
 
 export const SAMPLE_STUDENTS = [
-  { name: "이태경", days: ["월", "화", "수", "목", "금"], start_time: "19:40", end_time: "20:00", weekly_count: 2 },
-  { name: "김수진", days: ["월", "목"], start_time: "18:30", end_time: "21:00", weekly_count: 1 },
-  { name: "전희원", days: ["월", "수"], start_time: "18:30", end_time: "22:10", weekly_count: 2 },
-  { name: "전희원", days: ["토"], start_time: "10:00", end_time: "23:00", weekly_count: 2 },
-  { name: "송다혜", days: ["화"], start_time: "16:00", end_time: "23:00", weekly_count: 2 },
-  { name: "송다혜", days: ["수", "목", "금"], start_time: "19:00", end_time: "22:10", weekly_count: 2 },
-  { name: "양선", days: ["월", "화", "수"], start_time: "18:00", end_time: "18:00", weekly_count: 2 },
-  { name: "나모나", days: ["수"], start_time: "19:00", end_time: "20:00", weekly_count: 1 },
+  { name: "회원1", days: ["월", "화", "수", "목", "금"], start_time: "19:40", end_time: "20:00", weekly_count: 2 },
+  { name: "회원2", days: ["월", "목"], start_time: "18:30", end_time: "21:00", weekly_count: 1 },
+  { name: "회원3", days: ["월", "수"], start_time: "18:30", end_time: "22:10", weekly_count: 2 },
+  { name: "회원3", days: ["토"], start_time: "10:00", end_time: "23:00", weekly_count: 2 },
+  { name: "회원4", days: ["화"], start_time: "16:00", end_time: "23:00", weekly_count: 2 },
+  { name: "회원4", days: ["수", "목", "금"], start_time: "19:00", end_time: "22:10", weekly_count: 2 },
+  { name: "회원5", days: ["월", "화", "수"], start_time: "18:00", end_time: "18:00", weekly_count: 2 },
+  { name: "회원6", days: ["수"], start_time: "19:00", end_time: "20:00", weekly_count: 1 },
 ];
 
 export const SAMPLE_DEFAULTS = {

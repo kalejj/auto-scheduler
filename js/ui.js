@@ -5,33 +5,59 @@ import { downloadExcel } from "./excel.js";
 const form = document.querySelector("#schedule-form");
 const studentsInput = document.querySelector("#students-input");
 const statusBox = document.querySelector("#status");
-const metrics = document.querySelector("#metrics");
 const assignmentsSection = document.querySelector("#assignments-section");
-const studentsSection = document.querySelector("#students-section");
 const gridTarget = document.querySelector("#grid");
 const assignmentsTarget = document.querySelector("#assignments");
-const studentsTarget = document.querySelector("#students");
 const addStudentButton = document.querySelector("#add-student-button");
 const sampleButton = document.querySelector("#sample-button");
 const confirmButton = document.querySelector("#confirm-button");
 const excelButton = document.querySelector("#excel-button");
+const addFixedButton = document.querySelector("#add-fixed-button");
 const savedList = document.querySelector("#saved-list");
+
 const textModal = document.querySelector("#text-modal");
 const textModalLabel = document.querySelector("#text-modal-label");
 const textModalInput = document.querySelector("#text-modal-input");
 const textModalOk = document.querySelector("#text-modal-ok");
 const textModalCancel = document.querySelector("#text-modal-cancel");
 
+const eventModal = document.querySelector("#event-modal");
+const eventModalTitle = document.querySelector("#event-modal-title");
+const eventModalError = document.querySelector("#event-modal-error");
+const eventModalName = document.querySelector("#event-modal-name");
+const eventModalDay = document.querySelector("#event-modal-day");
+const eventModalStart = document.querySelector("#event-modal-start");
+const eventModalEnd = document.querySelector("#event-modal-end");
+const eventModalDelete = document.querySelector("#event-modal-delete");
+const eventModalSave = document.querySelector("#event-modal-save");
+const eventModalCancel = document.querySelector("#event-modal-cancel");
+
 let canDownloadExcel = false;
 let latestAssignments = [];
 let fixedAssignments = [];
 let confirmedMode = false;
-let scheduleFirstHour = 10;
-let dragState = null;
-let suppressScheduleClick = false;
 let studentId = 0;
 let conditionId = 0;
 const STORAGE_KEY = "auto-scheduler-confirmed-schedules";
+
+const mobileTabs = document.querySelectorAll(".mobile-tabs button");
+function setActiveTab(name) {
+  document.body.dataset.activeTab = name;
+  mobileTabs.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === name));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replaceAll("`", "&#096;");
+}
 
 function openTextModal(label, initialValue = "") {
   return new Promise((resolve) => {
@@ -64,19 +90,6 @@ function openTextModal(label, initialValue = "") {
     textModal.addEventListener("click", onBackdrop);
     textModalInput.addEventListener("keydown", onKeydown);
   });
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replaceAll("`", "&#096;");
 }
 
 function addStudentCard(student = {}) {
@@ -208,11 +221,11 @@ function getPayload() {
   };
 }
 
-function setStatus(kind, title, detail, errors = []) {
+function setStatus(kind, title, detail = "", errors = []) {
   statusBox.className = `panel status ${kind || ""}`;
   statusBox.innerHTML = `
     <strong>${escapeHtml(title)}</strong>
-    <div class="muted">${escapeHtml(detail || "")}</div>
+    ${detail ? `<div class="muted">${escapeHtml(detail)}</div>` : ""}
     ${errors.length ? `<ul>${errors.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
   `;
 }
@@ -269,19 +282,6 @@ function minutesToTime(minutes) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function snapMinutes(minutes) {
-  const step = Number(document.querySelector("#step").value) || 10;
-  return Math.round(minutes / step) * step;
-}
-
-function clampAssignmentTimes(start, end) {
-  const first = timeToMinutes(document.querySelector("#first-start").value);
-  const lastStart = timeToMinutes(document.querySelector("#last-start").value);
-  const duration = end - start;
-  const clampedStart = Math.max(first, Math.min(start, lastStart));
-  return [clampedStart, Math.max(clampedStart + 5, clampedStart + duration)];
-}
-
 function hourLabel(hour) {
   const h = ((hour % 24) + 24) % 24;
   if (h === 0) return "오전 12시";
@@ -299,7 +299,6 @@ function renderGrid(assignments) {
   const ends = assignments.length ? assignments.map((item) => timeToMinutes(item.end)) : [lastSetting + duration];
   const firstHour = Math.floor(Math.min(firstSetting, ...starts) / 60);
   const lastHour = Math.ceil(Math.max(lastSetting + duration, ...ends) / 60);
-  scheduleFirstHour = firstHour;
   const hours = [];
   for (let hour = firstHour; hour < lastHour; hour += 1) hours.push(hour);
 
@@ -339,8 +338,6 @@ function renderGrid(assignments) {
           <div class="schedule-event ${sourceClass}" data-index="${event.index}" style="${style}">
             ${escapeHtml(event.name)}
             <small>${escapeHtml(event.start)}-${escapeHtml(event.end)}</small>
-            <button class="event-delete" type="button" data-delete="1" aria-label="수업 삭제">×</button>
-            <span class="resize-handle" data-resize="1"></span>
           </div>
         `;
       })
@@ -351,6 +348,15 @@ function renderGrid(assignments) {
 
   gridTarget.innerHTML = `<div class="schedule" style="--hour-count:${hours.length}">${header}${body}</div>`;
   wireScheduleInteractions();
+}
+
+function wireScheduleInteractions() {
+  gridTarget.querySelectorAll(".schedule-event").forEach((eventEl) => {
+    eventEl.addEventListener("click", () => {
+      const index = Number(eventEl.dataset.index);
+      if (Number.isFinite(index)) openEventModal({ existingIndex: index });
+    });
+  });
 }
 
 function currentStudentNames() {
@@ -386,174 +392,110 @@ function removeAssignment(index) {
   }
 }
 
-function assignmentFromPointer(event, day) {
-  const column = event.currentTarget;
-  const rect = column.getBoundingClientRect();
-  const y = event.clientY - rect.top;
-  const start = snapMinutes(scheduleFirstHour * 60 + (y / 72) * 60);
-  const duration = Number(document.querySelector("#duration").value) || 50;
-  return {
-    day,
-    start: minutesToTime(start),
-    end: minutesToTime(start + duration),
-  };
+function hasConflict(candidate, ignoreIndex = -1) {
+  const cStart = timeToMinutes(candidate.start);
+  const cEnd = timeToMinutes(candidate.end);
+  return latestAssignments.some((other, i) => {
+    if (i === ignoreIndex) return false;
+    if (other.day !== candidate.day) return false;
+    const oStart = timeToMinutes(other.start);
+    const oEnd = timeToMinutes(other.end);
+    return cStart < oEnd && oStart < cEnd;
+  });
 }
 
-async function addFixedAssignmentFromClick(event) {
-  if (suppressScheduleClick) {
-    suppressScheduleClick = false;
-    return;
-  }
-  if (event.target.closest(".schedule-event")) return;
-  const day = event.currentTarget.dataset.day;
-  const draft = assignmentFromPointer(event, day);
-  const names = currentStudentNames();
-  const initial = names[0] || "";
-  const name = await openTextModal("일정 이름을 입력하세요.", initial);
-  if (!name) return;
-  const item = { ...draft, name: name.trim(), source: "fixed" };
-  confirmedMode = false;
-  latestAssignments.push(item);
-  fixedAssignments = latestAssignments.map((assignment) => ({ ...assignment }));
-  renderGrid(latestAssignments);
-  syncEditedAssignments();
-  setStatus("", "고정 수업 추가됨", `${item.day} ${item.start}-${item.end} ${item.name}`);
-}
-
-const LONG_PRESS_MS = 350;
-const LONG_PRESS_CANCEL_PX = 8;
-let longPressTimer = null;
-let longPressArmedEl = null;
-
-function clearLongPress() {
-  if (longPressTimer) {
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-  if (longPressArmedEl) {
-    longPressArmedEl.classList.remove("long-press-armed");
-    longPressArmedEl = null;
-  }
-}
-
-function beginDrag(eventEl, item, index, resizing, pointerEvent) {
-  dragState = {
-    index,
-    resizing,
-    pointerY: pointerEvent.clientY,
-    start: timeToMinutes(item.start),
-    end: timeToMinutes(item.end),
-    day: item.day,
-  };
-  eventEl.setPointerCapture?.(pointerEvent.pointerId);
-}
-
-function startScheduleDrag(event) {
-  if (event.target.dataset.delete) return;
-  const eventEl = event.target.closest(".schedule-event");
-  if (!eventEl) return;
-  const index = Number(eventEl.dataset.index);
-  const item = latestAssignments[index];
-  if (!item) return;
-
-  const resizing = Boolean(event.target.dataset.resize);
-  const isTouch = event.pointerType === "touch";
-
-  if (!isTouch || resizing) {
-    event.preventDefault();
-    beginDrag(eventEl, item, index, resizing, event);
-    return;
-  }
-
-  // 터치 + 일반 이동: long-press 로 진입
-  const startX = event.clientX;
-  const startY = event.clientY;
-  longPressArmedEl = eventEl;
-
-  const onMove = (e) => {
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (Math.hypot(dx, dy) > LONG_PRESS_CANCEL_PX) {
-      cleanup();
-    }
-  };
-  const onEnd = () => cleanup();
-  const cleanup = () => {
-    clearLongPress();
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onEnd);
-    window.removeEventListener("pointercancel", onEnd);
-  };
-  window.addEventListener("pointermove", onMove);
-  window.addEventListener("pointerup", onEnd);
-  window.addEventListener("pointercancel", onEnd);
-
-  longPressTimer = setTimeout(() => {
-    longPressTimer = null;
-    if (longPressArmedEl !== eventEl) return;
-    eventEl.classList.add("long-press-armed");
-    navigator.vibrate?.(15);
-    suppressScheduleClick = true;
-    beginDrag(eventEl, item, index, resizing, event);
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onEnd);
-    window.removeEventListener("pointercancel", onEnd);
-  }, LONG_PRESS_MS);
-}
-
-function moveScheduleDrag(event) {
-  if (!dragState) return;
-  event.preventDefault();
-  suppressScheduleClick = true;
-  const deltaMinutes = snapMinutes(((event.clientY - dragState.pointerY) / 72) * 60);
-  const item = latestAssignments[dragState.index];
-  if (!item) return;
-
-  if (dragState.resizing) {
-    const minEnd = dragState.start + 5;
-    item.end = minutesToTime(Math.max(minEnd, snapMinutes(dragState.end + deltaMinutes)));
+function showEventModalError(message) {
+  if (!message) {
+    eventModalError.classList.add("hidden");
+    eventModalError.textContent = "";
   } else {
-    const duration = dragState.end - dragState.start;
-    let start = snapMinutes(dragState.start + deltaMinutes);
-    let end = start + duration;
-    [start, end] = clampAssignmentTimes(start, end);
-    const targetDay = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest(".schedule-day")?.dataset.day;
-    item.day = targetDay || dragState.day;
-    item.start = minutesToTime(start);
-    item.end = minutesToTime(end);
-  }
-  renderGrid(latestAssignments);
-  syncEditedAssignments();
-}
-
-function endScheduleDrag() {
-  dragState = null;
-  if (longPressArmedEl) {
-    longPressArmedEl.classList.remove("long-press-armed");
-    longPressArmedEl = null;
+    eventModalError.classList.remove("hidden");
+    eventModalError.textContent = message;
   }
 }
 
-function wireScheduleInteractions() {
-  gridTarget.querySelectorAll(".schedule-day").forEach((column) => {
-    column.addEventListener("click", addFixedAssignmentFromClick);
-  });
-  gridTarget.querySelectorAll(".schedule-event").forEach((eventEl) => {
-    eventEl.addEventListener("pointerdown", startScheduleDrag);
-  });
-  gridTarget.querySelectorAll(".event-delete").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const index = Number(event.currentTarget.closest(".schedule-event").dataset.index);
-      removeAssignment(index);
-    });
-  });
+function defaultEndForStart(startValue) {
+  const duration = Number(document.querySelector("#duration").value) || 50;
+  return minutesToTime(timeToMinutes(startValue) + duration);
 }
 
-window.addEventListener("pointermove", moveScheduleDrag);
-window.addEventListener("pointerup", endScheduleDrag);
+function openEventModal({ existingIndex } = {}) {
+  const isEdit = existingIndex != null && Number.isFinite(existingIndex);
+  const existing = isEdit ? latestAssignments[existingIndex] : null;
+
+  eventModalTitle.textContent = isEdit ? "일정 편집" : "고정 일정 추가";
+  eventModalName.value = existing?.name ?? currentStudentNames()[0] ?? "";
+  eventModalDay.value = existing?.day ?? "월";
+  const startVal = existing?.start ?? "18:00";
+  eventModalStart.value = startVal;
+  eventModalEnd.value = existing?.end ?? defaultEndForStart(startVal);
+  eventModalDelete.classList.toggle("hidden", !isEdit);
+  showEventModalError("");
+
+  eventModal.classList.remove("hidden");
+  setTimeout(() => eventModalName.focus(), 50);
+
+  const cleanup = () => {
+    eventModal.classList.add("hidden");
+    eventModalSave.removeEventListener("click", onSave);
+    eventModalCancel.removeEventListener("click", onCancel);
+    eventModalDelete.removeEventListener("click", onDelete);
+    eventModal.removeEventListener("click", onBackdrop);
+    eventModalStart.removeEventListener("change", onStartChange);
+  };
+
+  const onStartChange = () => {
+    const s = timeToMinutes(eventModalStart.value);
+    const e = timeToMinutes(eventModalEnd.value);
+    if (e <= s) eventModalEnd.value = defaultEndForStart(eventModalStart.value);
+  };
+
+  const onSave = () => {
+    const name = eventModalName.value.trim();
+    const day = eventModalDay.value;
+    const start = eventModalStart.value;
+    const end = eventModalEnd.value;
+
+    if (!name) return showEventModalError("이름을 입력하세요.");
+    if (!start || !end) return showEventModalError("시작/종료 시간을 입력하세요.");
+    if (timeToMinutes(end) <= timeToMinutes(start)) {
+      return showEventModalError("종료 시간은 시작 시간보다 늦어야 합니다.");
+    }
+    if (hasConflict({ day, start, end }, isEdit ? existingIndex : -1)) {
+      return showEventModalError(`${day} ${start}-${end} 에 이미 다른 일정이 있습니다.`);
+    }
+
+    const item = { name, day, start, end, source: "fixed" };
+    if (isEdit) {
+      latestAssignments[existingIndex] = item;
+    } else {
+      latestAssignments.push(item);
+    }
+    confirmedMode = false;
+    fixedAssignments = latestAssignments.map((a) => ({ ...a }));
+    renderGrid(latestAssignments);
+    syncEditedAssignments();
+    setStatus("", isEdit ? "일정 수정됨" : "고정 수업 추가됨", `${day} ${start}-${end} ${name}`);
+    cleanup();
+  };
+
+  const onDelete = () => {
+    if (!isEdit) return;
+    removeAssignment(existingIndex);
+    cleanup();
+  };
+
+  const onCancel = () => cleanup();
+  const onBackdrop = (e) => {
+    if (e.target === eventModal) cleanup();
+  };
+
+  eventModalSave.addEventListener("click", onSave);
+  eventModalCancel.addEventListener("click", onCancel);
+  eventModalDelete.addEventListener("click", onDelete);
+  eventModal.addEventListener("click", onBackdrop);
+  eventModalStart.addEventListener("change", onStartChange);
+}
 
 function readSavedSchedules() {
   try {
@@ -640,18 +582,6 @@ function deleteSavedSchedule(id) {
   renderSavedSchedules();
 }
 
-function renderMetrics(data) {
-  metrics.classList.remove("hidden");
-  metrics.innerHTML = [
-    ["학생", data.total_students],
-    ["주 수업", data.total_lessons],
-    ["탐색 노드", data.nodes],
-    ["점수", data.cost == null ? "-" : Number(data.cost).toFixed(2)],
-  ]
-    .map(([label, value]) => `<div class="metric"><span class="muted">${label}</span><strong>${value}</strong></div>`)
-    .join("");
-}
-
 function renderResult(data) {
   canDownloadExcel = Boolean(data.success);
   excelButton.disabled = !canDownloadExcel;
@@ -663,15 +593,12 @@ function renderResult(data) {
     excelButton.disabled = true;
     confirmButton.disabled = true;
     setStatus("error", data.message, "", data.errors || []);
-    metrics.classList.add("hidden");
     assignmentsSection.classList.add("hidden");
-    studentsSection.classList.add("hidden");
     return;
   }
 
   latestAssignments = markAssignmentSources(data.assignments, fixedAssignments);
-  setStatus("success", data.message, `총 ${data.total_students}명, 주 ${data.total_lessons}회`);
-  renderMetrics(data);
+  setStatus("success", data.message);
 
   renderGrid(latestAssignments);
 
@@ -685,17 +612,6 @@ function renderResult(data) {
     latestAssignments
   );
   assignmentsSection.classList.remove("hidden");
-
-  studentsTarget.innerHTML = table(
-    [
-      { key: "name", label: "이름" },
-      { key: "weekly_count", label: "주 횟수" },
-      { key: "availability", label: "가능 요일/시간" },
-      { key: "slot_count", label: "가능 슬롯 수" },
-    ],
-    data.students
-  );
-  studentsSection.classList.remove("hidden");
 }
 
 function applySample() {
@@ -743,6 +659,7 @@ addStudentButton.addEventListener("click", () => {
 });
 sampleButton.addEventListener("click", applySample);
 confirmButton.addEventListener("click", confirmCurrentSchedule);
+addFixedButton.addEventListener("click", () => openEventModal());
 ["duration", "step", "first-start", "last-start"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("change", () => renderGrid(latestAssignments));
 });
@@ -755,11 +672,6 @@ excelButton.addEventListener("click", () => {
   }
 });
 
-const mobileTabs = document.querySelectorAll(".mobile-tabs button");
-function setActiveTab(name) {
-  document.body.dataset.activeTab = name;
-  mobileTabs.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === name));
-}
 mobileTabs.forEach((btn) => btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
 setActiveTab("input");
 

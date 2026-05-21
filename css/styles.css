@@ -55,7 +55,7 @@ label, .label {
   font-weight: 700;
 }
 
-input {
+input, select {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
@@ -64,9 +64,12 @@ input {
   color: var(--ink);
   padding: 10px 12px;
   outline: none;
+  font: inherit;
 }
 
-input:focus {
+select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+
+input:focus, select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(18, 109, 106, 0.12);
 }
@@ -392,15 +395,28 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .modal-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-top: 14px;
+  flex-wrap: wrap;
 }
+
+.modal-actions-spacer { flex: 1; min-width: 0; }
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-head h2 { flex: 1; min-width: 0; }
+.section-head button { min-height: 36px; padding: 0 12px; font-size: 13px; }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
   background: #fff;
 }
 
@@ -573,14 +589,21 @@ ul { margin: 8px 0 0; padding-left: 20px; }
     padding: 4px 4px;
     font-size: 10.5px;
     line-height: 1.2;
-    min-height: 26px;
+    min-height: 36px;
     border-radius: 6px;
     text-align: center;
     word-break: keep-all;
   }
   .schedule-event small {
-    display: none;
+    display: block;
+    margin-top: 2px;
+    font-size: 9.5px;
+    font-weight: 700;
+    opacity: 0.85;
   }
+
+  th, td { padding: 6px 4px; font-size: 11.5px; }
+  .table-wrap { overflow: hidden; }
   .event-delete {
     top: 2px;
     right: 2px;
@@ -604,5 +627,6 @@ ul { margin: 8px 0 0; padding-left: 20px; }
   .metrics { grid-template-columns: 1fr; }
 
   .schedule-event { font-size: 10px; padding: 3px 3px; }
+  .schedule-event small { font-size: 9px; }
   .schedule-time { font-size: 10px; }
 }
