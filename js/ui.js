@@ -3,10 +3,7 @@ import { getSample, generateSchedule } from "./api.js";
 import { downloadExcel } from "./excel.js";
 
 const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
 
-// App bar / drawer / sheet refs
-const appBar = $(".app-bar");
 const drawer = $("#drawer");
 const drawerBackdrop = $("#drawer-backdrop");
 const openDrawerBtn = $("#open-drawer-btn");
@@ -16,14 +13,13 @@ const savedSheet = $("#saved-sheet");
 const savedBackdrop = $("#saved-backdrop");
 const showSavedBtn = $("#show-saved-btn");
 const closeSavedBtn = $("#close-saved-btn");
+const openSettingsBtn = $("#open-settings-btn");
 
-// Form / input refs
 const form = $("#schedule-form");
 const studentsInput = $("#students-input");
 const addStudentButton = $("#add-student-button");
 const sampleButton = $("#sample-button");
 
-// Schedule / action refs
 const gridTarget = $("#grid");
 const alertBanner = $("#alert-banner");
 const emptyHint = $("#empty-hint");
@@ -34,12 +30,10 @@ const clearButton = $("#clear-button");
 const openEventModalBtn = $("#open-event-modal-btn");
 const savedList = $("#saved-list");
 
-// Toast
 const toast = $("#toast");
 const toastText = $("#toast-text");
 const toastSpinner = $("#toast-spinner");
 
-// Modals
 const textModal = $("#text-modal");
 const textModalLabel = $("#text-modal-label");
 const textModalInput = $("#text-modal-input");
@@ -57,13 +51,39 @@ const eventModalDelete = $("#event-modal-delete");
 const eventModalSave = $("#event-modal-save");
 const eventModalCancel = $("#event-modal-cancel");
 
+const settingsModal = $("#settings-modal");
+const settingsDuration = $("#settings-duration");
+const settingsStep = $("#settings-step");
+const settingsFirst = $("#settings-first");
+const settingsLast = $("#settings-last");
+const settingsBreak = $("#settings-break");
+const settingsSave = $("#settings-save");
+const settingsCancel = $("#settings-cancel");
+
+const timePickerModal = $("#time-picker-modal");
+const timePickerTitle = $("#time-picker-title");
+const timePickerOk = $("#time-picker-ok");
+const timePickerCancel = $("#time-picker-cancel");
+
 let latestAssignments = [];
 let fixedAssignments = [];
 let confirmedMode = false;
 let studentId = 0;
 let conditionId = 0;
 let toastTimer = null;
+
 const STORAGE_KEY = "auto-scheduler-confirmed-schedules";
+const SETTINGS_KEY = "auto-scheduler-settings";
+const DEFAULT_SETTINGS = {
+  duration_minutes: 50,
+  step_minutes: 10,
+  first_start_time: "10:00",
+  last_start_time: "23:00",
+  break_minutes: 0,
+};
+
+const WHEEL_ITEM_HEIGHT = 44;
+const MINUTE_STEP = 5;
 
 // ===== Utils =====
 
@@ -80,6 +100,7 @@ function escapeAttr(value) {
 }
 
 function timeToMinutes(value) {
+  if (!value) return 0;
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
 }
@@ -94,6 +115,15 @@ function hourLabel(hour) {
   if (h === 12) return "오후 12시";
   if (h < 12) return `오전 ${h}시`;
   return `오후 ${h - 12}시`;
+}
+function formatTimeDisplay(hhmm) {
+  if (!hhmm) return "";
+  const m = timeToMinutes(hhmm);
+  const isPm = m >= 720;
+  let h12 = Math.floor(m / 60) % 12;
+  if (h12 === 0) h12 = 12;
+  const min = m % 60;
+  return `${isPm ? "오후" : "오전"} ${h12}:${String(min).padStart(2, "0")}`;
 }
 
 // ===== Toast & Alert =====
@@ -126,7 +156,7 @@ function hideAlert() {
   alertBanner.innerHTML = "";
 }
 
-// ===== Drawer =====
+// ===== Drawer / Sheet =====
 
 function openDrawer() {
   drawer.classList.add("open");
@@ -136,9 +166,6 @@ function closeDrawer() {
   drawer.classList.remove("open");
   drawerBackdrop.classList.add("hidden");
 }
-
-// ===== Bottom sheet =====
-
 function openSavedSheet() {
   renderSavedSchedules();
   savedSheet.classList.remove("hidden");
@@ -149,7 +176,7 @@ function closeSavedSheet() {
   savedBackdrop.classList.add("hidden");
 }
 
-// ===== Text modal (for confirmation/title input) =====
+// ===== Text modal =====
 
 function openTextModal(label, initialValue = "") {
   return new Promise((resolve) => {
@@ -169,9 +196,7 @@ function openTextModal(label, initialValue = "") {
     };
     const onOk = () => cleanup(textModalInput.value.trim());
     const onCancel = () => cleanup(null);
-    const onBackdrop = (event) => {
-      if (event.target === textModal) cleanup(null);
-    };
+    const onBackdrop = (event) => { if (event.target === textModal) cleanup(null); };
     const onKeydown = (event) => {
       if (event.key === "Enter") onOk();
       if (event.key === "Escape") onCancel();
@@ -184,7 +209,184 @@ function openTextModal(label, initialValue = "") {
   });
 }
 
-// ===== Student card =====
+// ===== Wheel time picker =====
+
+let currentTimePickerResolve = null;
+const wheelScrollDebouncers = new Map();
+
+function buildWheelItems(wheelName, items, labelFn = (x) => String(x)) {
+  const inner = timePickerModal.querySelector(`[data-wheel="${wheelName}"] .wheel-inner`);
+  inner.innerHTML = items
+    .map((item) => `<div class="wheel-item" data-value="${escapeAttr(String(item))}">${escapeHtml(labelFn(item))}</div>`)
+    .join("");
+}
+
+function getWheel(name) {
+  return timePickerModal.querySelector(`[data-wheel="${name}"]`);
+}
+
+function setWheelScroll(wheelName, index) {
+  const wheel = getWheel(wheelName);
+  requestAnimationFrame(() => {
+    wheel.scrollTop = index * WHEEL_ITEM_HEIGHT;
+    updateSelectedItem(wheel);
+  });
+}
+
+function getWheelSelectedIndex(wheelName) {
+  const wheel = getWheel(wheelName);
+  return Math.max(0, Math.round(wheel.scrollTop / WHEEL_ITEM_HEIGHT));
+}
+
+function getWheelSelectedValue(wheelName) {
+  const wheel = getWheel(wheelName);
+  const items = wheel.querySelectorAll(".wheel-item");
+  const idx = Math.min(items.length - 1, getWheelSelectedIndex(wheelName));
+  return items[idx]?.dataset.value;
+}
+
+function updateSelectedItem(wheel) {
+  const items = wheel.querySelectorAll(".wheel-item");
+  const idx = Math.min(items.length - 1, Math.max(0, Math.round(wheel.scrollTop / WHEEL_ITEM_HEIGHT)));
+  items.forEach((item, i) => item.classList.toggle("selected", i === idx));
+}
+
+timePickerModal.querySelectorAll(".wheel").forEach((wheel) => {
+  wheel.addEventListener("scroll", () => {
+    if (wheelScrollDebouncers.has(wheel)) clearTimeout(wheelScrollDebouncers.get(wheel));
+    wheelScrollDebouncers.set(
+      wheel,
+      setTimeout(() => updateSelectedItem(wheel), 60)
+    );
+  });
+});
+
+function openTimePicker(initialHHMM, title = "시간 선택") {
+  timePickerTitle.textContent = title;
+
+  const minutes = timeToMinutes(initialHHMM || "18:00");
+  const isPm = minutes >= 720;
+  let h12 = Math.floor(minutes / 60) % 12;
+  if (h12 === 0) h12 = 12;
+  const m = minutes % 60;
+
+  buildWheelItems("ampm", ["오전", "오후"]);
+  buildWheelItems(
+    "hour",
+    Array.from({ length: 12 }, (_, i) => i + 1)
+  );
+  const minuteOpts = [];
+  for (let mm = 0; mm < 60; mm += MINUTE_STEP) minuteOpts.push(mm);
+  buildWheelItems("minute", minuteOpts, (mm) => String(mm).padStart(2, "0"));
+
+  timePickerModal.classList.remove("hidden");
+
+  setWheelScroll("ampm", isPm ? 1 : 0);
+  setWheelScroll("hour", h12 - 1);
+  let minIdx = minuteOpts.indexOf(m);
+  if (minIdx < 0) minIdx = Math.round(m / MINUTE_STEP) % minuteOpts.length;
+  setWheelScroll("minute", minIdx);
+
+  return new Promise((resolve) => {
+    currentTimePickerResolve = resolve;
+  });
+}
+
+function closeTimePicker(result) {
+  timePickerModal.classList.add("hidden");
+  const resolve = currentTimePickerResolve;
+  currentTimePickerResolve = null;
+  if (resolve) resolve(result);
+}
+
+timePickerOk.addEventListener("click", () => {
+  const isPm = getWheelSelectedIndex("ampm") === 1;
+  const h12 = parseInt(getWheelSelectedValue("hour"), 10);
+  const m = parseInt(getWheelSelectedValue("minute"), 10);
+  let h24 = h12 % 12;
+  if (isPm) h24 += 12;
+  const hhmm = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  closeTimePicker(hhmm);
+});
+timePickerCancel.addEventListener("click", () => closeTimePicker(null));
+timePickerModal.addEventListener("click", (e) => {
+  if (e.target === timePickerModal) closeTimePicker(null);
+});
+
+// Delegated handler for any .time-button
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".time-button");
+  if (!btn || btn.disabled) return;
+  const current = btn.dataset.time || "18:00";
+  const newTime = await openTimePicker(current, "시간 선택");
+  if (newTime) {
+    btn.dataset.time = newTime;
+    btn.textContent = formatTimeDisplay(newTime);
+    btn.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+});
+
+// ===== Settings =====
+
+function loadSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    return { ...DEFAULT_SETTINGS, ...raw };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+function persistSettings(settings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+function applySettingsToForm(s) {
+  $("#duration").value = s.duration_minutes;
+  $("#step").value = s.step_minutes;
+  $("#first-start").value = s.first_start_time;
+  $("#last-start").value = s.last_start_time;
+  $("#break-minutes").value = s.break_minutes;
+}
+
+function openSettingsModal() {
+  const s = loadSettings();
+  settingsDuration.value = s.duration_minutes;
+  settingsStep.value = s.step_minutes;
+  settingsFirst.dataset.time = s.first_start_time;
+  settingsFirst.textContent = formatTimeDisplay(s.first_start_time);
+  settingsLast.dataset.time = s.last_start_time;
+  settingsLast.textContent = formatTimeDisplay(s.last_start_time);
+  settingsBreak.value = s.break_minutes;
+  settingsModal.classList.remove("hidden");
+}
+function closeSettingsModal() {
+  settingsModal.classList.add("hidden");
+}
+
+settingsSave.addEventListener("click", () => {
+  const s = {
+    duration_minutes: Number(settingsDuration.value) || DEFAULT_SETTINGS.duration_minutes,
+    step_minutes: Number(settingsStep.value) || DEFAULT_SETTINGS.step_minutes,
+    first_start_time: settingsFirst.dataset.time || DEFAULT_SETTINGS.first_start_time,
+    last_start_time: settingsLast.dataset.time || DEFAULT_SETTINGS.last_start_time,
+    break_minutes: Number(settingsBreak.value) || 0,
+  };
+  if (timeToMinutes(s.first_start_time) > timeToMinutes(s.last_start_time)) {
+    showAlert("설정 오류", ["첫 시작 시간은 마지막 시작 시간보다 같거나 빨라야 합니다."]);
+    return;
+  }
+  persistSettings(s);
+  applySettingsToForm(s);
+  closeSettingsModal();
+  renderGrid(latestAssignments);
+  showToast("설정 저장됨", { duration: 1500 });
+});
+settingsCancel.addEventListener("click", closeSettingsModal);
+settingsModal.addEventListener("click", (e) => {
+  if (e.target === settingsModal) closeSettingsModal();
+});
+openSettingsBtn.addEventListener("click", openSettingsModal);
+
+// ===== Member (학생) card =====
 
 function addStudentCard(student = {}) {
   studentId += 1;
@@ -192,11 +394,13 @@ function addStudentCard(student = {}) {
   const card = document.createElement("section");
   card.className = "student-card";
   card.dataset.studentId = String(id);
+  const startVal = student.start_time || "18:00";
+  const endVal = student.end_time || "23:00";
   card.innerHTML = `
     <header class="student-card-title">
       <button class="student-toggle" type="button" aria-label="펼치기/접기"></button>
       <span class="student-number"></span>
-      <button class="icon-button danger remove-student" type="button" aria-label="학생 삭제">×</button>
+      <button class="icon-button danger remove-student" type="button" aria-label="회원 삭제">×</button>
     </header>
     <div class="student-card-body">
       <div class="student-head">
@@ -215,7 +419,7 @@ function addStudentCard(student = {}) {
   `;
 
   const conditions = card.querySelector(".conditions");
-  const rows = student.conditions || [{ days: [], start_time: "18:00", end_time: "23:00" }];
+  const rows = student.conditions || [{ days: [], start_time: startVal, end_time: endVal }];
   rows.forEach((condition) => addConditionRow(conditions, condition));
 
   card.querySelector(".remove-student").addEventListener("click", () => {
@@ -234,6 +438,8 @@ function addStudentCard(student = {}) {
 function addConditionRow(container, condition = {}) {
   conditionId += 1;
   const id = conditionId;
+  const startVal = condition.start_time || "18:00";
+  const endVal = condition.end_time || "23:00";
   const row = document.createElement("div");
   row.className = "condition-row";
   row.innerHTML = `
@@ -249,12 +455,12 @@ function addConditionRow(container, condition = {}) {
     </div>
     <div class="time-range">
       <div class="field">
-        <label for="start-${id}">시작</label>
-        <input id="start-${id}" class="start-time" type="time" value="${condition.start_time || "18:00"}" />
+        <label>시작</label>
+        <button type="button" class="time-button start-time" data-time="${escapeAttr(startVal)}">${escapeHtml(formatTimeDisplay(startVal))}</button>
       </div>
       <div class="field">
-        <label for="end-${id}">종료</label>
-        <input id="end-${id}" class="end-time" type="time" value="${condition.end_time || "23:00"}" />
+        <label>종료</label>
+        <button type="button" class="time-button end-time" data-time="${escapeAttr(endVal)}">${escapeHtml(formatTimeDisplay(endVal))}</button>
       </div>
     </div>
   `;
@@ -303,8 +509,8 @@ function getPayload() {
         name,
         weekly_count: weeklyCount,
         days: [...row.querySelectorAll(".day input:checked")].map((input) => input.value),
-        start_time: row.querySelector(".start-time").value,
-        end_time: row.querySelector(".end-time").value,
+        start_time: row.querySelector(".start-time").dataset.time,
+        end_time: row.querySelector(".end-time").dataset.time,
       });
     });
   });
@@ -326,7 +532,7 @@ function currentStudentNames() {
     .filter(Boolean);
 }
 
-// ===== Grid render =====
+// ===== Grid =====
 
 function colorForName(name) {
   const palette = [
@@ -482,6 +688,11 @@ function defaultEndForStart(startValue) {
   return minutesToTime(timeToMinutes(startValue) + duration);
 }
 
+function setEventModalTime(btn, hhmm) {
+  btn.dataset.time = hhmm;
+  btn.textContent = formatTimeDisplay(hhmm);
+}
+
 function openEventModal({ existingIndex } = {}) {
   const isEdit = existingIndex != null && Number.isFinite(existingIndex);
   const existing = isEdit ? latestAssignments[existingIndex] : null;
@@ -490,8 +701,8 @@ function openEventModal({ existingIndex } = {}) {
   eventModalName.value = existing?.name ?? currentStudentNames()[0] ?? "";
   eventModalDay.value = existing?.day ?? "월";
   const startVal = existing?.start ?? "18:00";
-  eventModalStart.value = startVal;
-  eventModalEnd.value = existing?.end ?? defaultEndForStart(startVal);
+  setEventModalTime(eventModalStart, startVal);
+  setEventModalTime(eventModalEnd, existing?.end ?? defaultEndForStart(startVal));
   eventModalDelete.classList.toggle("hidden", !isEdit);
   showEventModalError("");
 
@@ -508,16 +719,16 @@ function openEventModal({ existingIndex } = {}) {
   };
 
   const onStartChange = () => {
-    const s = timeToMinutes(eventModalStart.value);
-    const e = timeToMinutes(eventModalEnd.value);
-    if (e <= s) eventModalEnd.value = defaultEndForStart(eventModalStart.value);
+    const s = timeToMinutes(eventModalStart.dataset.time);
+    const e = timeToMinutes(eventModalEnd.dataset.time);
+    if (e <= s) setEventModalTime(eventModalEnd, defaultEndForStart(eventModalStart.dataset.time));
   };
 
   const onSave = () => {
     const name = eventModalName.value.trim();
     const day = eventModalDay.value;
-    const start = eventModalStart.value;
-    const end = eventModalEnd.value;
+    const start = eventModalStart.dataset.time;
+    const end = eventModalEnd.dataset.time;
 
     if (!name) return showEventModalError("이름을 입력하세요.");
     if (!start || !end) return showEventModalError("시작/종료 시간을 입력하세요.");
@@ -529,11 +740,8 @@ function openEventModal({ existingIndex } = {}) {
     }
 
     const item = { name, day, start, end, source: "fixed" };
-    if (isEdit) {
-      latestAssignments[existingIndex] = item;
-    } else {
-      latestAssignments.push(item);
-    }
+    if (isEdit) latestAssignments[existingIndex] = item;
+    else latestAssignments.push(item);
     confirmedMode = false;
     fixedAssignments = latestAssignments.map((a) => ({ ...a }));
     renderGrid(latestAssignments);
@@ -547,11 +755,8 @@ function openEventModal({ existingIndex } = {}) {
     removeAssignment(existingIndex);
     cleanup();
   };
-
   const onCancel = () => cleanup();
-  const onBackdrop = (e) => {
-    if (e.target === eventModal) cleanup();
-  };
+  const onBackdrop = (e) => { if (e.target === eventModal) cleanup(); };
 
   eventModalSave.addEventListener("click", onSave);
   eventModalCancel.addEventListener("click", onCancel);
@@ -563,11 +768,8 @@ function openEventModal({ existingIndex } = {}) {
 // ===== Saved schedules =====
 
 function readSavedSchedules() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { return []; }
 }
 function writeSavedSchedules(items) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -579,7 +781,6 @@ function renderSavedSchedules() {
     savedList.innerHTML = '<div class="saved-list-empty">확정된 시간표가 없습니다.</div>';
     return;
   }
-
   savedList.innerHTML = items
     .map(
       (item) => `
@@ -590,17 +791,15 @@ function renderSavedSchedules() {
           </div>
           <button class="ghost load-schedule" type="button" data-id="${item.id}">불러오기</button>
           <button class="danger delete-schedule" type="button" data-id="${item.id}">삭제</button>
-        </div>
-      `
+        </div>`
     )
     .join("");
-
-  savedList.querySelectorAll(".load-schedule").forEach((button) => {
-    button.addEventListener("click", () => loadSavedSchedule(button.dataset.id));
-  });
-  savedList.querySelectorAll(".delete-schedule").forEach((button) => {
-    button.addEventListener("click", () => deleteSavedSchedule(button.dataset.id));
-  });
+  savedList.querySelectorAll(".load-schedule").forEach((b) =>
+    b.addEventListener("click", () => loadSavedSchedule(b.dataset.id))
+  );
+  savedList.querySelectorAll(".delete-schedule").forEach((b) =>
+    b.addEventListener("click", () => deleteSavedSchedule(b.dataset.id))
+  );
 }
 
 async function confirmCurrentSchedule() {
@@ -629,8 +828,8 @@ function loadSavedSchedule(id) {
   const item = readSavedSchedules().find((saved) => saved.id === id);
   if (!item) return;
   confirmedMode = true;
-  latestAssignments = item.assignments.map((assignment) => ({ ...assignment }));
-  fixedAssignments = latestAssignments.map((assignment) => ({ ...assignment }));
+  latestAssignments = item.assignments.map((a) => ({ ...a }));
+  fixedAssignments = latestAssignments.map((a) => ({ ...a }));
   excelButton.disabled = false;
   confirmButton.disabled = false;
   clearButton.disabled = false;
@@ -654,7 +853,6 @@ function renderResult(data) {
     showAlert(data.message, data.errors || []);
     return;
   }
-
   hideAlert();
   latestAssignments = markAssignmentSources(data.assignments, fixedAssignments);
   confirmedMode = false;
@@ -675,19 +873,15 @@ function applySample() {
   confirmButton.disabled = true;
   clearButton.disabled = true;
   setStudentCards(groupSampleRows(data.sample_students || []));
-  $("#duration").value = data.duration_minutes;
-  $("#step").value = data.step_minutes;
-  $("#first-start").value = data.first_start_time;
-  $("#last-start").value = data.last_start_time;
-  $("#break-minutes").value = data.break_minutes;
+  // 예시 적용은 현재 설정값을 유지 (전역 설정이므로)
   renderGrid([]);
   hideAlert();
-  showToast("예시 데이터 적용됨", { duration: 1500 });
+  showToast("예시 회원 적용됨", { duration: 1500 });
 }
 
 function clearSchedule() {
   if (!latestAssignments.length) return;
-  if (!confirm("시간표를 초기화하시겠습니까? 입력된 학생 정보는 유지됩니다.")) return;
+  if (!confirm("시간표를 초기화하시겠습니까? 회원 정보는 유지됩니다.")) return;
   latestAssignments = [];
   fixedAssignments = [];
   confirmedMode = false;
@@ -697,19 +891,16 @@ function clearSchedule() {
   showToast("초기화됨", { duration: 1200 });
 }
 
-// ===== Form submit =====
+// ===== Generate =====
 
 function submitGenerate() {
   hideAlert();
   showToast("시간표 생성 중…", { loading: true });
 
-  // 짧은 지연으로 UI가 토스트를 먼저 그리도록
   setTimeout(() => {
     try {
       const data = generateSchedule(getPayload());
-      if (data.success) {
-        closeDrawer();
-      }
+      if (data.success) closeDrawer();
       renderResult(data);
       if (data.success) hideToast();
     } catch (exc) {
@@ -757,21 +948,19 @@ excelButton.addEventListener("click", () => {
   }
 });
 
-["duration", "step", "first-start", "last-start"].forEach((id) => {
-  $(`#${id}`).addEventListener("change", () => renderGrid(latestAssignments));
-});
-
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    if (!eventModal.classList.contains("hidden")) return;
-    if (!textModal.classList.contains("hidden")) return;
-    if (drawer.classList.contains("open")) closeDrawer();
-    else if (!savedSheet.classList.contains("hidden")) closeSavedSheet();
-  }
+  if (e.key !== "Escape") return;
+  if (!timePickerModal.classList.contains("hidden")) return closeTimePicker(null);
+  if (!eventModal.classList.contains("hidden")) return;
+  if (!textModal.classList.contains("hidden")) return;
+  if (!settingsModal.classList.contains("hidden")) return closeSettingsModal();
+  if (drawer.classList.contains("open")) return closeDrawer();
+  if (!savedSheet.classList.contains("hidden")) return closeSavedSheet();
 });
 
 // ===== Init =====
 
+applySettingsToForm(loadSettings());
 setStudentCards([]);
 renderGrid([]);
 syncEditedAssignments();
