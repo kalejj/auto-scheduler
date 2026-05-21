@@ -14,6 +14,95 @@
     <title>자동 시간표 생성기</title>
   </head>
   <body>
+    <header class="app-bar">
+      <button class="app-bar-btn" type="button" id="open-drawer-btn">
+        <span aria-hidden="true">☰</span> 입력
+      </button>
+      <h1 class="app-title">자동 시간표</h1>
+      <div class="app-bar-right">
+        <button class="app-bar-icon-btn" type="button" id="open-settings-btn" aria-label="설정">⚙</button>
+        <button class="app-bar-btn primary" type="button" id="open-event-modal-btn">+ 일정</button>
+      </div>
+    </header>
+
+    <main class="schedule-main">
+      <div id="alert-banner" class="alert hidden" role="alert"></div>
+      <div id="grid" class="schedule-wrap"></div>
+      <div id="empty-hint" class="empty-hint hidden">
+        <p>입력 패널에서 회원을 추가하고 <strong>시간표 생성</strong>을 눌러 시작하세요.</p>
+        <button class="primary" type="button" id="empty-open-drawer-btn">입력 열기</button>
+      </div>
+    </main>
+
+    <nav class="action-bar" id="action-bar" aria-label="시간표 액션">
+      <button class="action-btn" type="button" id="regenerate-button">
+        <span class="action-icon">↻</span>
+        <span>재생성</span>
+      </button>
+      <button class="action-btn" type="button" id="confirm-button" disabled>
+        <span class="action-icon">✓</span>
+        <span>확정</span>
+      </button>
+      <button class="action-btn" type="button" id="excel-button" disabled>
+        <span class="action-icon">⤓</span>
+        <span>엑셀</span>
+      </button>
+      <button class="action-btn" type="button" id="clear-button" disabled>
+        <span class="action-icon">⟲</span>
+        <span>초기화</span>
+      </button>
+      <button class="action-btn" type="button" id="show-saved-btn">
+        <span class="action-icon">☰</span>
+        <span>저장됨</span>
+      </button>
+    </nav>
+
+    <aside class="drawer" id="drawer" aria-label="입력 패널">
+      <header class="drawer-head">
+        <h2>입력</h2>
+        <button class="icon-button drawer-close" type="button" id="close-drawer-btn" aria-label="닫기">×</button>
+      </header>
+
+      <form id="schedule-form" class="drawer-body">
+        <section class="drawer-section">
+          <div class="drawer-section-head">
+            <h3>회원</h3>
+            <button class="ghost ghost-small" type="button" id="sample-button">예시 적용</button>
+          </div>
+          <div id="students-input" class="students"></div>
+          <button class="add-student-bottom" type="button" id="add-student-button">+ 회원 추가</button>
+        </section>
+
+        <input type="hidden" id="duration" name="duration_minutes" value="50" />
+        <input type="hidden" id="step" name="step_minutes" value="10" />
+        <input type="hidden" id="first-start" name="first_start_time" value="10:00" />
+        <input type="hidden" id="last-start" name="last_start_time" value="23:00" />
+        <input type="hidden" id="break-minutes" name="break_minutes" value="0" />
+      </form>
+
+      <footer class="drawer-foot">
+        <button class="primary submit-btn" type="submit" form="schedule-form">시간표 생성</button>
+      </footer>
+    </aside>
+    <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
+
+    <div class="bottom-sheet hidden" id="saved-sheet" aria-label="저장된 시간표">
+      <div class="bottom-sheet-handle"></div>
+      <header class="bottom-sheet-head">
+        <h2>저장된 시간표</h2>
+        <button class="icon-button" type="button" id="close-saved-btn" aria-label="닫기">×</button>
+      </header>
+      <div class="bottom-sheet-body">
+        <div id="saved-list" class="saved-list"></div>
+      </div>
+    </div>
+    <div class="bottom-sheet-backdrop hidden" id="saved-backdrop"></div>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite">
+      <span class="spinner hidden" id="toast-spinner"></span>
+      <span id="toast-text"></span>
+    </div>
+
     <div id="text-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal stack">
         <div class="field">
@@ -30,7 +119,7 @@
     <div id="event-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal stack">
         <h2 id="event-modal-title">고정 일정 추가</h2>
-        <div id="event-modal-error" class="muted hidden"></div>
+        <div id="event-modal-error" class="modal-error hidden"></div>
         <div class="field">
           <label for="event-modal-name">이름</label>
           <input id="event-modal-name" placeholder="이름" />
@@ -47,14 +136,14 @@
             <option value="일">일</option>
           </select>
         </div>
-        <div class="settings">
+        <div class="time-range">
           <div class="field">
-            <label for="event-modal-start">시작</label>
-            <input id="event-modal-start" type="time" />
+            <label>시작</label>
+            <button type="button" class="time-button" id="event-modal-start" data-time="18:00">오후 6:00</button>
           </div>
           <div class="field">
-            <label for="event-modal-end">종료</label>
-            <input id="event-modal-end" type="time" />
+            <label>종료</label>
+            <button type="button" class="time-button" id="event-modal-end" data-time="18:50">오후 6:50</button>
           </div>
         </div>
         <div class="modal-actions">
@@ -66,92 +155,55 @@
       </div>
     </div>
 
-    <nav class="mobile-tabs" role="tablist" aria-label="섹션 전환">
-      <button type="button" class="active" data-tab="input">입력</button>
-      <button type="button" data-tab="schedule">시간표</button>
-      <button type="button" data-tab="saved">저장</button>
-    </nav>
-
-    <div class="shell">
-      <aside class="stack">
-        <div class="stack">
-          <h1>자동 시간표 생성기</h1>
-          <p class="muted">학생별 가능 시간과 주 횟수를 넣으면 겹치지 않는 주간 시간표를 만듭니다.</p>
+    <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal stack">
+        <h2>설정</h2>
+        <div class="field">
+          <label for="settings-duration">강사 수업시간(분)</label>
+          <input id="settings-duration" type="number" min="10" max="180" step="10" />
         </div>
-
-        <form id="schedule-form" class="stack">
-          <div class="top-actions">
-            <button class="ghost" type="button" id="sample-button">예시 적용</button>
+        <div class="field">
+          <label for="settings-step">시작 단위(분)</label>
+          <input id="settings-step" type="number" min="5" max="60" step="5" />
+        </div>
+        <div class="time-range">
+          <div class="field">
+            <label>첫 시작</label>
+            <button type="button" class="time-button" id="settings-first" data-time="10:00">오전 10:00</button>
           </div>
-
-          <div id="students-input" class="students"></div>
-
-          <button class="add-student-bottom" type="button" id="add-student-button">+ 학생 추가</button>
-
-          <div class="settings">
-            <div class="field">
-              <label for="duration">트레이너 수업시간</label>
-              <input id="duration" name="duration_minutes" type="number" min="10" max="180" step="10" value="50" />
-            </div>
-            <div class="field">
-              <label for="step">시작 단위</label>
-              <input id="step" name="step_minutes" type="number" min="5" max="60" step="5" value="10" />
-            </div>
-            <div class="field">
-              <label for="first-start">첫 시작</label>
-              <input id="first-start" name="first_start_time" type="time" value="10:00" />
-            </div>
-            <div class="field">
-              <label for="last-start">마지막 시작</label>
-              <input id="last-start" name="last_start_time" type="time" value="23:00" />
-            </div>
-            <div class="field">
-              <label for="break-minutes">쉬는시간</label>
-              <input id="break-minutes" name="break_minutes" type="number" min="0" max="180" step="5" value="0" />
-            </div>
+          <div class="field">
+            <label>마지막 시작</label>
+            <button type="button" class="time-button" id="settings-last" data-time="23:00">오후 11:00</button>
           </div>
+        </div>
+        <div class="field">
+          <label for="settings-break">쉬는시간(분)</label>
+          <input id="settings-break" type="number" min="0" max="180" step="5" />
+        </div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button class="secondary" type="button" id="settings-cancel">취소</button>
+          <button class="primary" type="button" id="settings-save">저장</button>
+        </div>
+      </div>
+    </div>
 
-          <div class="actions">
-            <button class="primary" type="submit">시간표 생성</button>
-          </div>
-        </form>
-      </aside>
-
-      <main class="layout">
-        <section id="status" class="panel status">
-          <strong>대기 중</strong>
-          <div class="muted">학생과 가능 조건을 추가한 뒤 시간표를 생성합니다.</div>
-        </section>
-
-        <section id="grid-section" class="panel">
-          <div class="stack">
-            <div class="section-head">
-              <h2>시간표</h2>
-              <button class="primary" type="button" id="add-fixed-button">+ 고정 일정 추가</button>
-            </div>
-            <div class="actions">
-              <button class="primary" type="button" id="regenerate-button">재생성</button>
-              <button class="secondary" type="button" id="confirm-button" disabled>확정</button>
-              <button class="secondary" type="button" id="excel-button" disabled>엑셀 다운로드</button>
-            </div>
-            <div id="grid" class="schedule-wrap"></div>
-          </div>
-        </section>
-
-        <section id="assignments-section" class="panel hidden">
-          <div class="stack">
-            <h2>목록형 결과</h2>
-            <div id="assignments" class="table-wrap"></div>
-          </div>
-        </section>
-
-        <section id="saved-section" class="panel">
-          <div class="stack">
-            <h2>시간표 관리</h2>
-            <div id="saved-list" class="saved-list"></div>
-          </div>
-        </section>
-      </main>
+    <div id="time-picker-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal time-picker-modal-content">
+        <h2 id="time-picker-title">시간 선택</h2>
+        <div class="time-wheels">
+          <div class="wheel-highlight"></div>
+          <div class="wheel" data-wheel="ampm"><div class="wheel-inner"></div></div>
+          <div class="wheel" data-wheel="hour"><div class="wheel-inner"></div></div>
+          <div class="wheel-sep">:</div>
+          <div class="wheel" data-wheel="minute"><div class="wheel-inner"></div></div>
+        </div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button class="ghost" type="button" id="time-picker-cancel">취소</button>
+          <button class="primary" type="button" id="time-picker-ok">확인</button>
+        </div>
+      </div>
     </div>
 
     <script src="./vendor/xlsx.full.min.js"></script>

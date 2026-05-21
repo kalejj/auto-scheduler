@@ -2,50 +2,70 @@ import { DAYS } from "./constants.js";
 import { getSample, generateSchedule } from "./api.js";
 import { downloadExcel } from "./excel.js";
 
-const form = document.querySelector("#schedule-form");
-const studentsInput = document.querySelector("#students-input");
-const statusBox = document.querySelector("#status");
-const assignmentsSection = document.querySelector("#assignments-section");
-const gridTarget = document.querySelector("#grid");
-const assignmentsTarget = document.querySelector("#assignments");
-const addStudentButton = document.querySelector("#add-student-button");
-const sampleButton = document.querySelector("#sample-button");
-const confirmButton = document.querySelector("#confirm-button");
-const excelButton = document.querySelector("#excel-button");
-const addFixedButton = document.querySelector("#add-fixed-button");
-const regenerateButton = document.querySelector("#regenerate-button");
-const savedList = document.querySelector("#saved-list");
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
-const textModal = document.querySelector("#text-modal");
-const textModalLabel = document.querySelector("#text-modal-label");
-const textModalInput = document.querySelector("#text-modal-input");
-const textModalOk = document.querySelector("#text-modal-ok");
-const textModalCancel = document.querySelector("#text-modal-cancel");
+// App bar / drawer / sheet refs
+const appBar = $(".app-bar");
+const drawer = $("#drawer");
+const drawerBackdrop = $("#drawer-backdrop");
+const openDrawerBtn = $("#open-drawer-btn");
+const closeDrawerBtn = $("#close-drawer-btn");
+const emptyOpenDrawerBtn = $("#empty-open-drawer-btn");
+const savedSheet = $("#saved-sheet");
+const savedBackdrop = $("#saved-backdrop");
+const showSavedBtn = $("#show-saved-btn");
+const closeSavedBtn = $("#close-saved-btn");
 
-const eventModal = document.querySelector("#event-modal");
-const eventModalTitle = document.querySelector("#event-modal-title");
-const eventModalError = document.querySelector("#event-modal-error");
-const eventModalName = document.querySelector("#event-modal-name");
-const eventModalDay = document.querySelector("#event-modal-day");
-const eventModalStart = document.querySelector("#event-modal-start");
-const eventModalEnd = document.querySelector("#event-modal-end");
-const eventModalDelete = document.querySelector("#event-modal-delete");
-const eventModalSave = document.querySelector("#event-modal-save");
-const eventModalCancel = document.querySelector("#event-modal-cancel");
+// Form / input refs
+const form = $("#schedule-form");
+const studentsInput = $("#students-input");
+const addStudentButton = $("#add-student-button");
+const sampleButton = $("#sample-button");
 
-let canDownloadExcel = false;
+// Schedule / action refs
+const gridTarget = $("#grid");
+const alertBanner = $("#alert-banner");
+const emptyHint = $("#empty-hint");
+const regenerateButton = $("#regenerate-button");
+const confirmButton = $("#confirm-button");
+const excelButton = $("#excel-button");
+const clearButton = $("#clear-button");
+const openEventModalBtn = $("#open-event-modal-btn");
+const savedList = $("#saved-list");
+
+// Toast
+const toast = $("#toast");
+const toastText = $("#toast-text");
+const toastSpinner = $("#toast-spinner");
+
+// Modals
+const textModal = $("#text-modal");
+const textModalLabel = $("#text-modal-label");
+const textModalInput = $("#text-modal-input");
+const textModalOk = $("#text-modal-ok");
+const textModalCancel = $("#text-modal-cancel");
+
+const eventModal = $("#event-modal");
+const eventModalTitle = $("#event-modal-title");
+const eventModalError = $("#event-modal-error");
+const eventModalName = $("#event-modal-name");
+const eventModalDay = $("#event-modal-day");
+const eventModalStart = $("#event-modal-start");
+const eventModalEnd = $("#event-modal-end");
+const eventModalDelete = $("#event-modal-delete");
+const eventModalSave = $("#event-modal-save");
+const eventModalCancel = $("#event-modal-cancel");
+
 let latestAssignments = [];
 let fixedAssignments = [];
 let confirmedMode = false;
 let studentId = 0;
 let conditionId = 0;
+let toastTimer = null;
 const STORAGE_KEY = "auto-scheduler-confirmed-schedules";
 
-const mobileTabs = document.querySelectorAll(".mobile-tabs button");
-function setActiveTab(name) {
-  document.body.dataset.activeTab = name;
-  mobileTabs.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === name));
-}
+// ===== Utils =====
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -55,10 +75,81 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll("`", "&#096;");
 }
+
+function timeToMinutes(value) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+function minutesToTime(minutes) {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+function hourLabel(hour) {
+  const h = ((hour % 24) + 24) % 24;
+  if (h === 0) return "오전 12시";
+  if (h === 12) return "오후 12시";
+  if (h < 12) return `오전 ${h}시`;
+  return `오후 ${h - 12}시`;
+}
+
+// ===== Toast & Alert =====
+
+function showToast(text, { loading = false, duration = 0 } = {}) {
+  toast.classList.remove("hidden");
+  toastText.textContent = text;
+  toastSpinner.classList.toggle("hidden", !loading);
+  clearTimeout(toastTimer);
+  if (duration > 0) {
+    toastTimer = setTimeout(() => toast.classList.add("hidden"), duration);
+  }
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  toast.classList.add("hidden");
+}
+
+function showAlert(title, errors = []) {
+  alertBanner.classList.remove("hidden");
+  alertBanner.innerHTML = `
+    <button class="icon-button alert-close" type="button" aria-label="닫기">×</button>
+    <strong>${escapeHtml(title)}</strong>
+    ${errors.length ? `<ul>${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>` : ""}
+  `;
+  alertBanner.querySelector(".alert-close").addEventListener("click", hideAlert);
+}
+function hideAlert() {
+  alertBanner.classList.add("hidden");
+  alertBanner.innerHTML = "";
+}
+
+// ===== Drawer =====
+
+function openDrawer() {
+  drawer.classList.add("open");
+  drawerBackdrop.classList.remove("hidden");
+}
+function closeDrawer() {
+  drawer.classList.remove("open");
+  drawerBackdrop.classList.add("hidden");
+}
+
+// ===== Bottom sheet =====
+
+function openSavedSheet() {
+  renderSavedSchedules();
+  savedSheet.classList.remove("hidden");
+  savedBackdrop.classList.remove("hidden");
+}
+function closeSavedSheet() {
+  savedSheet.classList.add("hidden");
+  savedBackdrop.classList.add("hidden");
+}
+
+// ===== Text modal (for confirmation/title input) =====
 
 function openTextModal(label, initialValue = "") {
   return new Promise((resolve) => {
@@ -92,6 +183,8 @@ function openTextModal(label, initialValue = "") {
     textModalInput.addEventListener("keydown", onKeydown);
   });
 }
+
+// ===== Student card =====
 
 function addStudentCard(student = {}) {
   studentId += 1;
@@ -227,39 +320,13 @@ function getPayload() {
   };
 }
 
-function setStatus(kind, title, detail = "", errors = []) {
-  statusBox.className = `panel status ${kind || ""}`;
-  statusBox.innerHTML = `
-    <strong>${escapeHtml(title)}</strong>
-    ${detail ? `<div class="muted">${escapeHtml(detail)}</div>` : ""}
-    ${errors.length ? `<ul>${errors.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
-  `;
+function currentStudentNames() {
+  return [...studentsInput.querySelectorAll(".student-name")]
+    .map((input) => input.value.trim())
+    .filter(Boolean);
 }
 
-function table(headers, rows) {
-  const head = headers.map((item) => `<th>${escapeHtml(item.label)}</th>`).join("");
-  const body = rows
-    .map((row) => {
-      const cells = headers
-        .map((item) => `<td>${escapeHtml(row[item.key] ?? "")}</td>`)
-        .join("");
-      return `<tr>${cells}</tr>`;
-    })
-    .join("");
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-}
-
-function assignmentKey(item) {
-  return `${item.name}|${item.day}|${item.start}|${item.end}`;
-}
-
-function markAssignmentSources(assignments, fixedItems) {
-  const fixedKeys = new Set(fixedItems.map(assignmentKey));
-  return assignments.map((item) => ({
-    ...item,
-    source: item.source || (fixedKeys.has(assignmentKey(item)) ? "fixed" : "generated"),
-  }));
-}
+// ===== Grid render =====
 
 function colorForName(name) {
   const palette = [
@@ -277,29 +344,10 @@ function colorForName(name) {
   return palette[hash % palette.length];
 }
 
-function timeToMinutes(value) {
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function minutesToTime(minutes) {
-  const hour = Math.floor(minutes / 60);
-  const minute = minutes % 60;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
-function hourLabel(hour) {
-  const h = ((hour % 24) + 24) % 24;
-  if (h === 0) return "오전 12시";
-  if (h === 12) return "오후 12시";
-  if (h < 12) return `오전 ${h}시`;
-  return `오후 ${h - 12}시`;
-}
-
 function renderGrid(assignments) {
-  const firstSetting = timeToMinutes(document.querySelector("#first-start").value || "10:00");
-  const lastSetting = timeToMinutes(document.querySelector("#last-start").value || "23:00");
-  const duration = Number(document.querySelector("#duration").value) || 50;
+  const firstSetting = timeToMinutes($("#first-start").value || "10:00");
+  const lastSetting = timeToMinutes($("#last-start").value || "23:00");
+  const duration = Number($("#duration").value) || 50;
   const starts = assignments.length ? assignments.map((item) => timeToMinutes(item.start)) : [firstSetting];
   const ends = assignments.length ? assignments.map((item) => timeToMinutes(item.end)) : [lastSetting + duration];
   const firstHour = Math.floor(Math.min(firstSetting, ...starts) / 60);
@@ -356,6 +404,7 @@ function renderGrid(assignments) {
 
   gridTarget.innerHTML = `<div class="schedule" style="--hour-count:${hours.length}">${header}${body}</div>`;
   wireScheduleInteractions();
+  updateEmptyState();
 }
 
 function wireScheduleInteractions() {
@@ -367,27 +416,31 @@ function wireScheduleInteractions() {
   });
 }
 
-function currentStudentNames() {
-  return [...studentsInput.querySelectorAll(".student-name")]
-    .map((input) => input.value.trim())
-    .filter(Boolean);
+function updateEmptyState() {
+  emptyHint.classList.toggle("hidden", latestAssignments.length > 0);
+}
+
+// ===== Assignment ops =====
+
+function assignmentKey(item) {
+  return `${item.name}|${item.day}|${item.start}|${item.end}`;
+}
+
+function markAssignmentSources(assignments, fixedItems) {
+  const fixedKeys = new Set(fixedItems.map(assignmentKey));
+  return assignments.map((item) => ({
+    ...item,
+    source: item.source || (fixedKeys.has(assignmentKey(item)) ? "fixed" : "generated"),
+  }));
 }
 
 function syncEditedAssignments() {
   fixedAssignments = latestAssignments.map((item) => ({ ...item }));
-  canDownloadExcel = latestAssignments.length > 0;
-  excelButton.disabled = !canDownloadExcel;
-  confirmButton.disabled = !latestAssignments.length;
-  assignmentsTarget.innerHTML = table(
-    [
-      { key: "day", label: "요일" },
-      { key: "start", label: "시작" },
-      { key: "end", label: "종료" },
-      { key: "name", label: "이름" },
-    ],
-    latestAssignments
-  );
-  assignmentsSection.classList.toggle("hidden", !latestAssignments.length);
+  const has = latestAssignments.length > 0;
+  excelButton.disabled = !has;
+  confirmButton.disabled = !has;
+  clearButton.disabled = !has;
+  updateEmptyState();
 }
 
 function removeAssignment(index) {
@@ -396,7 +449,7 @@ function removeAssignment(index) {
   renderGrid(latestAssignments);
   syncEditedAssignments();
   if (removed) {
-    setStatus("", "수업 삭제됨", `${removed.day} ${removed.start}-${removed.end} ${removed.name}`);
+    showToast(`${removed.day} ${removed.start} ${removed.name} 삭제`, { duration: 1500 });
   }
 }
 
@@ -412,6 +465,8 @@ function hasConflict(candidate, ignoreIndex = -1) {
   });
 }
 
+// ===== Event modal =====
+
 function showEventModalError(message) {
   if (!message) {
     eventModalError.classList.add("hidden");
@@ -423,7 +478,7 @@ function showEventModalError(message) {
 }
 
 function defaultEndForStart(startValue) {
-  const duration = Number(document.querySelector("#duration").value) || 50;
+  const duration = Number($("#duration").value) || 50;
   return minutesToTime(timeToMinutes(startValue) + duration);
 }
 
@@ -483,7 +538,7 @@ function openEventModal({ existingIndex } = {}) {
     fixedAssignments = latestAssignments.map((a) => ({ ...a }));
     renderGrid(latestAssignments);
     syncEditedAssignments();
-    setStatus("", isEdit ? "일정 수정됨" : "고정 수업 추가됨", `${day} ${start}-${end} ${name}`);
+    showToast(isEdit ? "일정 수정됨" : "고정 일정 추가됨", { duration: 1500 });
     cleanup();
   };
 
@@ -505,6 +560,8 @@ function openEventModal({ existingIndex } = {}) {
   eventModalStart.addEventListener("change", onStartChange);
 }
 
+// ===== Saved schedules =====
+
 function readSavedSchedules() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
@@ -512,7 +569,6 @@ function readSavedSchedules() {
     return [];
   }
 }
-
 function writeSavedSchedules(items) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
@@ -520,7 +576,7 @@ function writeSavedSchedules(items) {
 function renderSavedSchedules() {
   const items = readSavedSchedules();
   if (!items.length) {
-    savedList.innerHTML = '<div class="muted">확정된 시간표가 없습니다.</div>';
+    savedList.innerHTML = '<div class="saved-list-empty">확정된 시간표가 없습니다.</div>';
     return;
   }
 
@@ -564,10 +620,9 @@ async function confirmCurrentSchedule() {
   };
   const items = [item, ...readSavedSchedules()].slice(0, 20);
   writeSavedSchedules(items);
-  renderSavedSchedules();
   renderGrid(latestAssignments);
   syncEditedAssignments();
-  setStatus("success", "시간표 확정됨", `${item.title} 저장 완료`);
+  showToast(`확정 저장: ${item.title}`, { duration: 1800 });
 }
 
 function loadSavedSchedule(id) {
@@ -576,13 +631,13 @@ function loadSavedSchedule(id) {
   confirmedMode = true;
   latestAssignments = item.assignments.map((assignment) => ({ ...assignment }));
   fixedAssignments = latestAssignments.map((assignment) => ({ ...assignment }));
-  canDownloadExcel = true;
   excelButton.disabled = false;
   confirmButton.disabled = false;
+  clearButton.disabled = false;
   renderGrid(latestAssignments);
   syncEditedAssignments();
-  setStatus("success", "시간표 불러옴", item.title);
-  setActiveTab("schedule");
+  showToast(`불러옴: ${item.title}`, { duration: 1800 });
+  closeSavedSheet();
 }
 
 function deleteSavedSchedule(id) {
@@ -590,36 +645,25 @@ function deleteSavedSchedule(id) {
   renderSavedSchedules();
 }
 
-function renderResult(data) {
-  canDownloadExcel = Boolean(data.success);
-  excelButton.disabled = !canDownloadExcel;
-  confirmButton.disabled = !data.success;
-  confirmedMode = false;
+// ===== Result =====
 
+function renderResult(data) {
   if (!data.success) {
-    canDownloadExcel = false;
     excelButton.disabled = true;
     confirmButton.disabled = true;
-    setStatus("error", data.message, "", data.errors || []);
-    assignmentsSection.classList.add("hidden");
+    showAlert(data.message, data.errors || []);
     return;
   }
 
+  hideAlert();
   latestAssignments = markAssignmentSources(data.assignments, fixedAssignments);
-  setStatus("success", data.message);
-
+  confirmedMode = false;
+  excelButton.disabled = false;
+  confirmButton.disabled = false;
+  clearButton.disabled = false;
   renderGrid(latestAssignments);
-
-  assignmentsTarget.innerHTML = table(
-    [
-      { key: "day", label: "요일" },
-      { key: "start", label: "시작" },
-      { key: "end", label: "종료" },
-      { key: "name", label: "이름" },
-    ],
-    latestAssignments
-  );
-  assignmentsSection.classList.remove("hidden");
+  syncEditedAssignments();
+  showToast(data.message, { duration: 1800 });
 }
 
 function applySample() {
@@ -627,66 +671,110 @@ function applySample() {
   latestAssignments = [];
   fixedAssignments = [];
   confirmedMode = false;
-  canDownloadExcel = false;
   excelButton.disabled = true;
   confirmButton.disabled = true;
+  clearButton.disabled = true;
   setStudentCards(groupSampleRows(data.sample_students || []));
-  document.querySelector("#duration").value = data.duration_minutes;
-  document.querySelector("#step").value = data.step_minutes;
-  document.querySelector("#first-start").value = data.first_start_time;
-  document.querySelector("#last-start").value = data.last_start_time;
-  document.querySelector("#break-minutes").value = data.break_minutes;
+  $("#duration").value = data.duration_minutes;
+  $("#step").value = data.step_minutes;
+  $("#first-start").value = data.first_start_time;
+  $("#last-start").value = data.last_start_time;
+  $("#break-minutes").value = data.break_minutes;
   renderGrid([]);
+  hideAlert();
+  showToast("예시 데이터 적용됨", { duration: 1500 });
+}
+
+function clearSchedule() {
+  if (!latestAssignments.length) return;
+  if (!confirm("시간표를 초기화하시겠습니까? 입력된 학생 정보는 유지됩니다.")) return;
+  latestAssignments = [];
+  fixedAssignments = [];
+  confirmedMode = false;
+  renderGrid([]);
+  syncEditedAssignments();
+  hideAlert();
+  showToast("초기화됨", { duration: 1200 });
+}
+
+// ===== Form submit =====
+
+function submitGenerate() {
+  hideAlert();
+  showToast("시간표 생성 중…", { loading: true });
+
+  // 짧은 지연으로 UI가 토스트를 먼저 그리도록
+  setTimeout(() => {
+    try {
+      const data = generateSchedule(getPayload());
+      if (data.success) {
+        closeDrawer();
+      }
+      renderResult(data);
+      if (data.success) hideToast();
+    } catch (exc) {
+      hideToast();
+      showAlert("오류", [exc.message || String(exc)]);
+    }
+  }, 30);
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  setStatus(
-    "",
-    "생성 중",
-    fixedAssignments.length
-      ? "현재 시간표를 고정한 채 빈 자리를 다시 탐색하고 있습니다."
-      : "조건을 탐색하고 있습니다."
-  );
-  excelButton.disabled = true;
-
-  setTimeout(() => {
-    try {
-      const data = generateSchedule(getPayload());
-      renderResult(data);
-      if (data.success) setActiveTab("schedule");
-    } catch (exc) {
-      setStatus("error", "오류", exc.message || String(exc));
-    }
-  }, 10);
+  submitGenerate();
 });
+
+// ===== Wiring =====
+
+openDrawerBtn.addEventListener("click", openDrawer);
+closeDrawerBtn.addEventListener("click", closeDrawer);
+drawerBackdrop.addEventListener("click", closeDrawer);
+emptyOpenDrawerBtn.addEventListener("click", openDrawer);
+
+showSavedBtn.addEventListener("click", openSavedSheet);
+closeSavedBtn.addEventListener("click", closeSavedSheet);
+savedBackdrop.addEventListener("click", closeSavedSheet);
+
+openEventModalBtn.addEventListener("click", () => openEventModal());
 
 addStudentButton.addEventListener("click", () => {
   const next = addStudentCard();
   next.scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
 sampleButton.addEventListener("click", applySample);
+
 confirmButton.addEventListener("click", confirmCurrentSchedule);
-addFixedButton.addEventListener("click", () => openEventModal());
-regenerateButton.addEventListener("click", () => form.requestSubmit());
-["duration", "step", "first-start", "last-start"].forEach((id) => {
-  document.querySelector(`#${id}`).addEventListener("change", () => renderGrid(latestAssignments));
-});
+regenerateButton.addEventListener("click", () => submitGenerate());
+clearButton.addEventListener("click", clearSchedule);
+
 excelButton.addEventListener("click", () => {
-  if (!canDownloadExcel) return;
+  if (!latestAssignments.length) return;
   try {
     downloadExcel(latestAssignments);
+    showToast("엑셀 다운로드", { duration: 1500 });
   } catch (exc) {
-    setStatus("error", "엑셀 저장 실패", exc.message || String(exc));
+    showAlert("엑셀 저장 실패", [exc.message || String(exc)]);
   }
 });
 
-mobileTabs.forEach((btn) => btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
-setActiveTab("input");
+["duration", "step", "first-start", "last-start"].forEach((id) => {
+  $(`#${id}`).addEventListener("change", () => renderGrid(latestAssignments));
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (!eventModal.classList.contains("hidden")) return;
+    if (!textModal.classList.contains("hidden")) return;
+    if (drawer.classList.contains("open")) closeDrawer();
+    else if (!savedSheet.classList.contains("hidden")) closeSavedSheet();
+  }
+});
+
+// ===== Init =====
 
 setStudentCards([]);
 renderGrid([]);
-renderSavedSchedules();
+syncEditedAssignments();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
