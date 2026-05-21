@@ -227,9 +227,13 @@ function getWheel(name) {
 
 function setWheelScroll(wheelName, index) {
   const wheel = getWheel(wheelName);
+  // 모달이 막 표시된 직후엔 레이아웃이 아직 안 잡혀있을 수 있음 → 두 번의 rAF + reflow 강제
   requestAnimationFrame(() => {
-    wheel.scrollTop = index * WHEEL_ITEM_HEIGHT;
-    updateSelectedItem(wheel);
+    requestAnimationFrame(() => {
+      void wheel.offsetHeight;
+      wheel.scrollTop = index * WHEEL_ITEM_HEIGHT;
+      updateSelectedItem(wheel);
+    });
   });
 }
 
@@ -847,6 +851,7 @@ function deleteSavedSchedule(id) {
 // ===== Result =====
 
 function renderResult(data) {
+  hideToast();
   if (!data.success) {
     excelButton.disabled = true;
     confirmButton.disabled = true;
@@ -898,15 +903,16 @@ function submitGenerate() {
   showToast("시간표 생성 중…", { loading: true });
 
   setTimeout(() => {
+    let data;
     try {
-      const data = generateSchedule(getPayload());
-      if (data.success) closeDrawer();
-      renderResult(data);
-      if (data.success) hideToast();
+      data = generateSchedule(getPayload());
     } catch (exc) {
       hideToast();
       showAlert("오류", [exc.message || String(exc)]);
+      return;
     }
+    if (data.success) closeDrawer();
+    renderResult(data);
   }, 30);
 }
 
@@ -970,3 +976,11 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").catch(() => {});
   });
 }
+
+// 디버그용 전역 에러 노출 — 사용자가 새로고침해도 모르는 무음 실패 방지
+window.addEventListener("error", (e) => {
+  showAlert("스크립트 오류", [e.message || String(e.error || e)]);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  showAlert("처리되지 않은 오류", [String(e.reason?.message || e.reason || "")]);
+});

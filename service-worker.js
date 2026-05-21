@@ -1,4 +1,4 @@
-const CACHE_NAME = "auto-scheduler-v9";
+const CACHE_NAME = "auto-scheduler-v10";
 const ASSETS = [
   "./",
   "./index.html",
@@ -17,13 +17,7 @@ const ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      Promise.all(
-        ASSETS.map((url) =>
-          cache.add(url).catch(() => {
-            // 개별 자원 실패는 무시 (예: 아직 다운로드 안 된 vendor)
-          })
-        )
-      )
+      Promise.all(ASSETS.map((url) => cache.add(url).catch(() => {})))
     )
   );
   self.skipWaiting();
@@ -38,22 +32,24 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first: 최신 자원을 우선 가져오고, 오프라인일 때만 캐시 사용.
+// 개발 중 캐시 stale 이슈 방지.
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
 
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request)
-        .then((response) => {
-          if (response.ok && new URL(request.url).origin === self.location.origin) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-    })
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
+        }
+        return response;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
   );
 });
