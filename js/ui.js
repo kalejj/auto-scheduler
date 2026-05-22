@@ -1,6 +1,7 @@
 import { DAYS, SAMPLE_STUDENTS } from "./constants.js";
 import { generateSchedule } from "./api.js";
 import { downloadExcel } from "./excel.js";
+import { shareScheduleImage } from "./share.js";
 import {
   loadMembers,
   addMember,
@@ -84,6 +85,7 @@ const excelButton = $("#excel-button");
 const clearButton = $("#clear-button");
 const moreButton = $("#more-button");
 const moreMenu = $("#more-menu");
+const shareButton = $("#share-button");
 const openEventModalBtn = $("#open-event-modal-btn");
 
 const emptyStateNoMembers = $("#empty-state-no-members");
@@ -828,6 +830,7 @@ function syncActionButtons() {
   const has = currentWeekSessions.length > 0;
   excelButton.disabled = !has;
   clearButton.disabled = !has;
+  shareButton.disabled = !has;
 }
 
 function updateEmptyState() {
@@ -1507,6 +1510,27 @@ excelButton.addEventListener("click", () => {
     showToast("엑셀 다운로드", { duration: 1500 });
   } catch (exc) {
     showAlert("엑셀 저장 실패", [exc.message || String(exc)]);
+  }
+});
+
+shareButton.addEventListener("click", async () => {
+  if (currentWeekSessions.length === 0) return;
+  const settings = loadSettings();
+  showToast("이미지 생성 중…", { loading: true });
+  try {
+    const res = await shareScheduleImage({
+      sessions: currentWeekSessions,
+      weekStart: currentWeekStart,
+      firstStartTime: settings.first_start_time,
+      lastStartTime: settings.last_start_time,
+      durationMinutes: settings.duration_minutes,
+    });
+    hideToast();
+    if (res.method === "share") showToast("공유 시작됨", { duration: 1500 });
+    else if (res.method === "download") showToast("이미지 다운로드됨", { duration: 1800 });
+  } catch (exc) {
+    hideToast();
+    showAlert("공유 실패", [exc.message || String(exc)]);
   }
 });
 
