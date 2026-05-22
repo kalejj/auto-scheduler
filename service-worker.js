@@ -1,4 +1,4 @@
-const CACHE_NAME = "auto-scheduler-v13";
+const CACHE_NAME = "auto-scheduler-v14";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,8 @@ const ASSETS = [
   "./js/api.js",
   "./js/excel.js",
   "./js/members.js",
+  "./js/sessions.js",
+  "./js/dates.js",
   "./js/ui.js",
   "./vendor/xlsx.full.min.js",
   "./icons/icon.svg",

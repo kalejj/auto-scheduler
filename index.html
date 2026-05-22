@@ -26,11 +26,22 @@
     </header>
 
     <main class="schedule-main">
+      <nav class="week-nav" aria-label="주 이동">
+        <button class="week-nav-btn" type="button" id="week-prev-btn" aria-label="이전 주">‹</button>
+        <button class="week-nav-label" type="button" id="week-label-btn" aria-label="오늘로 이동">
+          <span id="week-range-text">—</span>
+          <span class="week-nav-sub" id="week-month-text"></span>
+        </button>
+        <button class="week-nav-btn" type="button" id="week-next-btn" aria-label="다음 주">›</button>
+      </nav>
       <div id="alert-banner" class="alert hidden" role="alert"></div>
       <div id="grid" class="schedule-wrap"></div>
       <div id="empty-hint" class="empty-hint hidden">
-        <p>입력 패널에서 회원을 추가하고 <strong>시간표 생성</strong>을 눌러 시작하세요.</p>
-        <button class="primary" type="button" id="empty-open-drawer-btn">입력 열기</button>
+        <p>이번 주에 등록된 일정이 없습니다.<br>아래에서 <strong>시간표 생성</strong> 또는 <strong>지난 주 패턴 복사</strong>로 시작하세요.</p>
+        <div class="empty-hint-actions">
+          <button class="primary" type="button" id="empty-generate-btn">시간표 생성</button>
+          <button class="secondary" type="button" id="empty-copy-prev-btn">지난 주 복사</button>
+        </div>
       </div>
     </main>
 
@@ -39,9 +50,9 @@
         <span class="action-icon">↻</span>
         <span>재생성</span>
       </button>
-      <button class="action-btn" type="button" id="confirm-button" disabled>
-        <span class="action-icon">✓</span>
-        <span>확정</span>
+      <button class="action-btn" type="button" id="copy-prev-button">
+        <span class="action-icon">⇇</span>
+        <span>지난주 복사</span>
       </button>
       <button class="action-btn" type="button" id="excel-button" disabled>
         <span class="action-icon">⤓</span>
@@ -49,11 +60,11 @@
       </button>
       <button class="action-btn" type="button" id="clear-button" disabled>
         <span class="action-icon">⟲</span>
-        <span>초기화</span>
+        <span>비우기</span>
       </button>
-      <button class="action-btn" type="button" id="show-saved-btn">
-        <span class="action-icon">☰</span>
-        <span>저장됨</span>
+      <button class="action-btn" type="button" id="show-stats-btn">
+        <span class="action-icon">📊</span>
+        <span>통계</span>
       </button>
     </nav>
 
@@ -95,17 +106,17 @@
     </aside>
     <div class="drawer-backdrop hidden" id="drawer-backdrop"></div>
 
-    <div class="bottom-sheet hidden" id="saved-sheet" aria-label="저장된 시간표">
+    <div class="bottom-sheet hidden" id="stats-sheet" aria-label="통계">
       <div class="bottom-sheet-handle"></div>
       <header class="bottom-sheet-head">
-        <h2>저장된 시간표</h2>
-        <button class="icon-button" type="button" id="close-saved-btn" aria-label="닫기">×</button>
+        <h2 id="stats-sheet-title">통계</h2>
+        <button class="icon-button" type="button" id="close-stats-btn" aria-label="닫기">×</button>
       </header>
       <div class="bottom-sheet-body">
-        <div id="saved-list" class="saved-list"></div>
+        <div id="stats-content"></div>
       </div>
     </div>
-    <div class="bottom-sheet-backdrop hidden" id="saved-backdrop"></div>
+    <div class="bottom-sheet-backdrop hidden" id="stats-backdrop"></div>
 
     <div class="toast hidden" id="toast" role="status" aria-live="polite">
       <span class="spinner hidden" id="toast-spinner"></span>
