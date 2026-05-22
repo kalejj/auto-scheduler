@@ -65,12 +65,25 @@ const sampleButton = $("#sample-button");
 
 const gridTarget = $("#grid");
 const alertBanner = $("#alert-banner");
-const emptyHint = $("#empty-hint");
+// emptyHint 제거 — 대신 empty-state-no-members, empty-state-no-sessions 사용
 const regenerateButton = $("#regenerate-button");
-const confirmButton = $("#confirm-button");
 const excelButton = $("#excel-button");
 const clearButton = $("#clear-button");
+const moreButton = $("#more-button");
+const moreMenu = $("#more-menu");
 const openEventModalBtn = $("#open-event-modal-btn");
+
+const emptyStateNoMembers = $("#empty-state-no-members");
+const emptyStateNoSessions = $("#empty-state-no-sessions");
+const emptyWeekText = $("#empty-week-text");
+const emptyAddMemberBtn = $("#empty-add-member-btn");
+const emptySampleBtn = $("#empty-sample-btn");
+
+const eventModalLockRow = $("#event-modal-lock-row");
+const eventModalLocked = $("#event-modal-locked");
+
+const onboardingModal = $("#onboarding-modal");
+const onboardingStartBtn = $("#onboarding-start");
 
 const toast = $("#toast");
 const toastText = $("#toast-text");
@@ -794,15 +807,29 @@ function refreshCurrentWeek() {
 
 function syncActionButtons() {
   const has = currentWeekSessions.length > 0;
-  const hasGenerated = currentWeekSessions.some((s) => s.source === "generated");
   excelButton.disabled = !has;
   clearButton.disabled = !has;
-  confirmButton.disabled = !hasGenerated;
 }
 
 function updateEmptyState() {
-  emptyHint.classList.toggle("hidden", currentWeekSessions.length > 0);
-  gridTarget.classList.toggle("hidden", currentWeekSessions.length === 0);
+  const hasMembers = loadMembers().some((m) => m.active && m.name?.trim());
+  const hasSessions = currentWeekSessions.length > 0;
+
+  // 상호 배타: 회원 없음 vs 일정 없음 vs 일정 있음
+  if (!hasMembers) {
+    emptyStateNoMembers.classList.remove("hidden");
+    emptyStateNoSessions.classList.add("hidden");
+    gridTarget.classList.add("hidden");
+  } else if (!hasSessions) {
+    emptyStateNoMembers.classList.add("hidden");
+    emptyStateNoSessions.classList.remove("hidden");
+    emptyWeekText.textContent = `${formatWeekRange(currentWeekStart)} 일정이 없습니다`;
+    gridTarget.classList.add("hidden");
+  } else {
+    emptyStateNoMembers.classList.add("hidden");
+    emptyStateNoSessions.classList.add("hidden");
+    gridTarget.classList.remove("hidden");
+  }
 }
 
 weekPrevBtn.addEventListener("click", () => {
@@ -878,11 +905,11 @@ function renderGrid(sessions) {
     const todayClass = iso === today ? " is-today" : "";
     const events = eventsByDay.get(day).map((event) => {
       const [bg, ink] = colorForName(event.name);
-      const sourceClass = event.source === "fixed" ? "schedule-event--fixed" : "schedule-event--generated";
-      const style = `top:${event.topPct}%;height:${event.heightPct}%`;
+      const lockClass = event.source === "fixed" ? "is-locked" : "";
+      const style = `top:${event.topPct}%;height:${event.heightPct}%;--event-bg:${bg};--event-ink:${ink}`;
       const statusAttr = event.status && event.status !== "pending" ? ` data-status="${escapeAttr(event.status)}"` : "";
       return `
-        <div class="schedule-event ${sourceClass}" data-index="${event.index}" data-session-id="${escapeAttr(event.id)}" style="${style}"${statusAttr}>
+        <div class="schedule-event ${lockClass}" data-index="${event.index}" data-session-id="${escapeAttr(event.id)}" style="${style}"${statusAttr}>
           ${escapeHtml(event.name)}
           <small>${escapeHtml(event.start)}-${escapeHtml(event.end)}</small>
         </div>
@@ -1001,9 +1028,13 @@ function openEventModal({ sessionId = null } = {}) {
   eventModalDelete.classList.toggle("hidden", !isEdit);
   showEventModalError("");
 
-  const showStatusSection = isEdit && session.source !== "fixed" && session.member_id;
+  const showStatusSection = isEdit && session.member_id;
   eventModalStatusSection.classList.toggle("hidden", !showStatusSection);
   if (showStatusSection) updateEventModalStatusUI(session.status || "pending");
+
+  // 잠금 토글: 편집 모드에만 표시 (새 추가 시는 자동 fixed)
+  eventModalLockRow.classList.toggle("hidden", !isEdit);
+  eventModalLocked.checked = isEdit ? session.source === "fixed" : true;
 
   eventModal.classList.remove("hidden");
   // 자동 포커스 제거 — 키패드 자동 열림 방지
@@ -1054,15 +1085,17 @@ function openEventModal({ sessionId = null } = {}) {
     }
 
     const date = dayNameToISO(currentWeekStart, day);
+    const lockedNow = eventModalLocked.checked;
+    const newSource = lockedNow ? "fixed" : "generated";
     if (isEdit) {
-      updateSession(session.id, { name, day, date, start, end });
+      updateSession(session.id, { name, day, date, start, end, source: newSource });
     } else {
-      // 회원 이름 일치하면 member_id 자동 연결, 아니면 fixed event
+      // 새 추가 = 일회성 이벤트, 항상 fixed 로 저장
       const matchedMember = loadMembers().find((m) => m.name === name);
       addSession({
         date, day, start, end, name,
         member_id: matchedMember?.id || null,
-        source: matchedMember ? "generated" : "fixed",
+        source: "fixed",
         status: "pending",
       });
     }
@@ -1218,18 +1251,7 @@ function copyPreviousWeek() {
   showToast(`지난 주 일정 ${newSessions.length}개 복사 (모두 고정)`, { duration: 2000 });
 }
 
-function confirmAllSessions() {
-  const generated = currentWeekSessions.filter((s) => s.source === "generated");
-  if (generated.length === 0) {
-    showToast("확정할 일정이 없습니다", { duration: 1500 });
-    return;
-  }
-  for (const s of generated) {
-    updateSession(s.id, { source: "fixed" });
-  }
-  refreshCurrentWeek();
-  showToast(`${generated.length}개 일정 확정 (고정)`, { duration: 1800 });
-}
+// (확정 버튼 제거됨 — 잠금은 일정별 모달에서 토글)
 
 // ===== Stats sheet =====
 
@@ -1298,9 +1320,30 @@ sampleButton.addEventListener("click", applySample);
 regenerateButton.addEventListener("click", () => submitGenerate());
 clearButton.addEventListener("click", clearCurrentWeek);
 copyPrevButton.addEventListener("click", copyPreviousWeek);
-confirmButton.addEventListener("click", confirmAllSessions);
 emptyGenerateBtn.addEventListener("click", () => submitGenerate());
 emptyCopyPrevBtn.addEventListener("click", copyPreviousWeek);
+emptyAddMemberBtn.addEventListener("click", () => { openDrawer(); openMemberModal(); });
+emptySampleBtn.addEventListener("click", applySample);
+
+// More menu toggle
+function toggleMoreMenu(force) {
+  const isHidden = moreMenu.classList.contains("hidden");
+  const wantOpen = force === undefined ? isHidden : force;
+  moreMenu.classList.toggle("hidden", !wantOpen);
+}
+moreButton.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleMoreMenu();
+});
+document.addEventListener("click", (e) => {
+  if (moreMenu.classList.contains("hidden")) return;
+  if (moreMenu.contains(e.target) || moreButton.contains(e.target)) return;
+  toggleMoreMenu(false);
+});
+// 메뉴 안 버튼 클릭 시 메뉴 닫기
+moreMenu.querySelectorAll("button").forEach((btn) => {
+  btn.addEventListener("click", () => toggleMoreMenu(false));
+});
 
 excelButton.addEventListener("click", () => {
   if (currentWeekSessions.length === 0) return;
@@ -1324,11 +1367,30 @@ document.addEventListener("keydown", (e) => {
   if (!statsSheet.classList.contains("hidden")) return closeStatsSheet();
 });
 
+// ===== Onboarding =====
+
+const ONBOARDING_KEY = "auto-scheduler-onboarding-seen";
+function showOnboardingIfNeeded() {
+  if (localStorage.getItem(ONBOARDING_KEY)) return;
+  onboardingModal.classList.remove("hidden");
+}
+onboardingStartBtn.addEventListener("click", () => {
+  localStorage.setItem(ONBOARDING_KEY, "1");
+  onboardingModal.classList.add("hidden");
+});
+onboardingModal.addEventListener("click", (e) => {
+  if (e.target === onboardingModal) {
+    localStorage.setItem(ONBOARDING_KEY, "1");
+    onboardingModal.classList.add("hidden");
+  }
+});
+
 // ===== Init =====
 
 purgeLegacySavedSchedules();      // 옛 saved-schedules 정리
 applySettingsToForm(loadSettings());
 refreshCurrentWeek();
+showOnboardingIfNeeded();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
