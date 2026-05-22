@@ -126,11 +126,39 @@
     <div class="bottom-sheet hidden" id="stats-sheet" aria-label="통계">
       <div class="bottom-sheet-handle"></div>
       <header class="bottom-sheet-head">
-        <h2 id="stats-sheet-title">통계</h2>
+        <h2 id="stats-sheet-title">월간 통계</h2>
         <button class="icon-button" type="button" id="close-stats-btn" aria-label="닫기">×</button>
       </header>
       <div class="bottom-sheet-body">
-        <div id="stats-content"></div>
+        <nav class="month-nav">
+          <button class="week-nav-btn" type="button" id="stats-month-prev" aria-label="이전 달">‹</button>
+          <button class="week-nav-label" type="button" id="stats-month-today" aria-label="이번 달로">
+            <span id="stats-month-text">—</span>
+          </button>
+          <button class="week-nav-btn" type="button" id="stats-month-next" aria-label="다음 달">›</button>
+        </nav>
+
+        <div class="stats-summary">
+          <div class="stats-card">
+            <div class="stats-card-label">완료</div>
+            <div class="stats-card-value" id="stats-completed">0</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-card-label">노쇼</div>
+            <div class="stats-card-value" id="stats-noshow">0</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-card-label">매출</div>
+            <div class="stats-card-value" id="stats-revenue">₩0</div>
+          </div>
+        </div>
+
+        <h3 class="stats-section-title">월간 캘린더</h3>
+        <p class="stats-hint">날짜를 누르면 해당 주로 이동합니다</p>
+        <div class="mini-cal" id="mini-cal"></div>
+
+        <h3 class="stats-section-title">회원별</h3>
+        <div id="stats-member-table"></div>
       </div>
     </div>
     <div class="bottom-sheet-backdrop hidden" id="stats-backdrop"></div>
@@ -155,7 +183,7 @@
 
     <div id="event-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
       <div class="modal stack">
-        <h2 id="event-modal-title">고정 일정 추가</h2>
+        <h2 id="event-modal-title">일정 추가</h2>
         <div id="event-modal-error" class="modal-error hidden"></div>
 
         <div id="event-modal-status-section" class="status-section hidden">
@@ -171,15 +199,30 @@
           </div>
         </div>
 
+        <div class="field">
+          <div class="label">일정 종류</div>
+          <div class="segmented" id="event-modal-type">
+            <input type="radio" name="event-type" id="event-type-member" value="member" checked />
+            <label for="event-type-member">회원 수업</label>
+            <input type="radio" name="event-type" id="event-type-personal" value="personal" />
+            <label for="event-type-personal">개인 일정</label>
+          </div>
+        </div>
+
+        <div class="field" id="event-modal-member-row">
+          <label for="event-modal-member">회원</label>
+          <select id="event-modal-member"></select>
+        </div>
+
+        <div class="field hidden" id="event-modal-name-row">
+          <label for="event-modal-name">이름</label>
+          <input id="event-modal-name" placeholder="예: 회의, 점심, 외부 일정" />
+        </div>
+
         <label id="event-modal-lock-row" class="lock-row hidden">
           <input type="checkbox" id="event-modal-locked" />
           <span class="lock-row-text"><strong>🔒 이 일정 잠금</strong><br><small>다시 만들기 시 이 일정은 보존됩니다.</small></span>
         </label>
-
-        <div class="field">
-          <label for="event-modal-name">이름</label>
-          <input id="event-modal-name" placeholder="이름" />
-        </div>
         <div class="field">
           <label for="event-modal-day">요일</label>
           <select id="event-modal-day">

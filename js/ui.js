@@ -13,11 +13,15 @@ import {
   todayISO,
   weekStartISO,
   addWeeks,
+  addMonths,
   weekDays,
   dayNameToISO,
   formatDateShort,
   formatWeekRange,
   formatYearMonth,
+  monthOfISO,
+  monthStartISO,
+  calendarGrid,
   pad2,
 } from "./dates.js";
 import {
@@ -46,8 +50,17 @@ const statsSheet = $("#stats-sheet");
 const statsBackdrop = $("#stats-backdrop");
 const showStatsBtn = $("#show-stats-btn");
 const closeStatsBtn = $("#close-stats-btn");
-const statsContent = $("#stats-content");
-const statsSheetTitle = $("#stats-sheet-title");
+const statsMonthPrev = $("#stats-month-prev");
+const statsMonthNext = $("#stats-month-next");
+const statsMonthToday = $("#stats-month-today");
+const statsMonthText = $("#stats-month-text");
+const statsCompleted = $("#stats-completed");
+const statsNoShow = $("#stats-noshow");
+const statsRevenue = $("#stats-revenue");
+const miniCalEl = $("#mini-cal");
+const statsMemberTable = $("#stats-member-table");
+
+let statsMonthISO = monthOfISO(todayISO()); // "YYYY-MM"
 
 const weekPrevBtn = $("#week-prev-btn");
 const weekNextBtn = $("#week-next-btn");
@@ -81,6 +94,11 @@ const emptySampleBtn = $("#empty-sample-btn");
 
 const eventModalLockRow = $("#event-modal-lock-row");
 const eventModalLocked = $("#event-modal-locked");
+const eventTypeMemberRadio = $("#event-type-member");
+const eventTypePersonalRadio = $("#event-type-personal");
+const eventModalMemberRow = $("#event-modal-member-row");
+const eventModalNameRow = $("#event-modal-name-row");
+const eventModalMemberSelect = $("#event-modal-member");
 
 const onboardingModal = $("#onboarding-modal");
 const onboardingStartBtn = $("#onboarding-start");
@@ -269,6 +287,7 @@ function closeDrawer() {
 }
 
 function openStatsSheet() {
+  statsMonthISO = monthOfISO(todayISO());  // 항상 이번 달부터
   renderStats();
   statsSheet.classList.remove("hidden");
   statsBackdrop.classList.remove("hidden");
@@ -1015,12 +1034,51 @@ function activeMemberNames() {
   return loadMembers().filter((m) => m.active && m.name?.trim()).map((m) => m.name);
 }
 
+function populateMemberSelect(selectedId = null) {
+  const members = loadMembers().filter((m) => m.active && m.name?.trim());
+  if (members.length === 0) {
+    eventModalMemberSelect.innerHTML = `<option value="">(등록된 회원 없음)</option>`;
+    eventModalMemberSelect.disabled = true;
+    return;
+  }
+  eventModalMemberSelect.disabled = false;
+  eventModalMemberSelect.innerHTML = members
+    .map((m) => `<option value="${escapeAttr(m.id)}"${m.id === selectedId ? " selected" : ""}>${escapeHtml(m.name)}</option>`)
+    .join("");
+}
+
+function setEventModalType(type) {
+  const isMember = type === "member";
+  eventTypeMemberRadio.checked = isMember;
+  eventTypePersonalRadio.checked = !isMember;
+  eventModalMemberRow.classList.toggle("hidden", !isMember);
+  eventModalNameRow.classList.toggle("hidden", isMember);
+}
+
 function openEventModal({ sessionId = null } = {}) {
   const session = sessionId ? currentWeekSessions.find((s) => s.id === sessionId) : null;
   const isEdit = !!session;
 
-  eventModalTitle.textContent = isEdit ? "일정 편집" : "고정 일정 추가";
-  eventModalName.value = session?.name ?? activeMemberNames()[0] ?? "";
+  eventModalTitle.textContent = isEdit ? "일정 편집" : "일정 추가";
+
+  // 일정 종류 결정
+  let type = "member";
+  if (isEdit) {
+    type = session.member_id ? "member" : "personal";
+  } else {
+    // 신규: 활성 회원이 있으면 회원 수업 기본, 없으면 개인 일정
+    const hasMembers = loadMembers().some((m) => m.active && m.name?.trim());
+    type = hasMembers ? "member" : "personal";
+  }
+  setEventModalType(type);
+
+  // 회원 select 채우기
+  populateMemberSelect(session?.member_id || null);
+
+  // 개인 일정 이름
+  eventModalName.value = session && !session.member_id ? session.name : "";
+
+  // 날짜/시간
   eventModalDay.value = session?.day ?? "월";
   const startVal = session?.start ?? "18:00";
   setEventModalTime(eventModalStart, startVal);
@@ -1050,6 +1108,10 @@ function openEventModal({ sessionId = null } = {}) {
   const onMarkCancelled = () => mark("cancelled");
   const onMarkReset = () => mark("pending");
 
+  const onTypeChange = () => {
+    setEventModalType(eventTypeMemberRadio.checked ? "member" : "personal");
+  };
+
   const cleanup = () => {
     eventModal.classList.add("hidden");
     eventModalSave.removeEventListener("click", onSave);
@@ -1061,6 +1123,8 @@ function openEventModal({ sessionId = null } = {}) {
     eventModalMarkNoShow.removeEventListener("click", onMarkNoShow);
     eventModalMarkCancelled.removeEventListener("click", onMarkCancelled);
     eventModalMarkReset.removeEventListener("click", onMarkReset);
+    eventTypeMemberRadio.removeEventListener("change", onTypeChange);
+    eventTypePersonalRadio.removeEventListener("change", onTypeChange);
   };
 
   const onStartChange = () => {
@@ -1070,12 +1134,25 @@ function openEventModal({ sessionId = null } = {}) {
   };
 
   const onSave = () => {
-    const name = eventModalName.value.trim();
+    const isMemberType = eventTypeMemberRadio.checked;
     const day = eventModalDay.value;
     const start = eventModalStart.dataset.time;
     const end = eventModalEnd.dataset.time;
 
-    if (!name) return showEventModalError("이름을 입력하세요.");
+    let name = "";
+    let memberId = null;
+
+    if (isMemberType) {
+      memberId = eventModalMemberSelect.value;
+      if (!memberId) return showEventModalError("회원을 선택하세요.");
+      const member = loadMembers().find((m) => m.id === memberId);
+      if (!member) return showEventModalError("선택한 회원을 찾을 수 없습니다.");
+      name = member.name;
+    } else {
+      name = eventModalName.value.trim();
+      if (!name) return showEventModalError("일정 이름을 입력하세요.");
+    }
+
     if (!start || !end) return showEventModalError("시작/종료 시간을 입력하세요.");
     if (timeToMinutes(end) <= timeToMinutes(start)) {
       return showEventModalError("종료 시간은 시작 시간보다 늦어야 합니다.");
@@ -1085,22 +1162,25 @@ function openEventModal({ sessionId = null } = {}) {
     }
 
     const date = dayNameToISO(currentWeekStart, day);
-    const lockedNow = eventModalLocked.checked;
+    const lockedNow = isEdit ? eventModalLocked.checked : true;
     const newSource = lockedNow ? "fixed" : "generated";
+
     if (isEdit) {
-      updateSession(session.id, { name, day, date, start, end, source: newSource });
+      updateSession(session.id, {
+        name, day, date, start, end,
+        member_id: memberId,
+        source: newSource,
+      });
     } else {
-      // 새 추가 = 일회성 이벤트, 항상 fixed 로 저장
-      const matchedMember = loadMembers().find((m) => m.name === name);
       addSession({
         date, day, start, end, name,
-        member_id: matchedMember?.id || null,
+        member_id: memberId,
         source: "fixed",
         status: "pending",
       });
     }
     refreshCurrentWeek();
-    showToast(isEdit ? "일정 수정됨" : "일정 추가됨", { duration: 1500 });
+    showToast(isEdit ? "일정 수정됨" : (isMemberType ? `${name} 수업 추가됨` : "일정 추가됨"), { duration: 1500 });
     cleanup();
   };
 
@@ -1121,6 +1201,8 @@ function openEventModal({ sessionId = null } = {}) {
   eventModalMarkNoShow.addEventListener("click", onMarkNoShow);
   eventModalMarkCancelled.addEventListener("click", onMarkCancelled);
   eventModalMarkReset.addEventListener("click", onMarkReset);
+  eventTypeMemberRadio.addEventListener("change", onTypeChange);
+  eventTypePersonalRadio.addEventListener("change", onTypeChange);
 }
 
 // ===== Generate =====
@@ -1255,52 +1337,125 @@ function copyPreviousWeek() {
 
 // ===== Stats sheet =====
 
+function perSessionRevenue(m) {
+  const ms = m.membership;
+  if (!ms || !ms.total_count || !ms.price) return 0;
+  return ms.price / ms.total_count;
+}
+
 function renderStats() {
-  const now = new Date();
-  const monthISO = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  const monthISO = statsMonthISO;
   const counts = allMonthCounts(monthISO);
   const members = loadMembers();
 
   let totalCompleted = 0;
   let totalNoShow = 0;
-  for (const v of counts.values()) {
-    totalCompleted += v.completed;
-    totalNoShow += v.noShow;
+  let totalRevenue = 0;
+
+  const memberRows = members.map((m) => {
+    const c = counts.get(m.id) || { completed: 0, noShow: 0 };
+    const perRev = perSessionRevenue(m);
+    const consumed = c.completed + c.noShow;
+    const revenue = Math.round(perRev * consumed);
+    totalCompleted += c.completed;
+    totalNoShow += c.noShow;
+    totalRevenue += revenue;
+    return { id: m.id, name: m.name, ...c, revenue };
+  });
+
+  // Month nav text
+  statsMonthText.textContent = formatYearMonth(`${monthISO}-01`);
+
+  // Summary
+  statsCompleted.textContent = String(totalCompleted);
+  statsNoShow.textContent = String(totalNoShow);
+  statsRevenue.textContent = totalRevenue > 0
+    ? `₩${totalRevenue.toLocaleString()}`
+    : "—";
+
+  // Mini calendar
+  renderMiniCalendar(monthISO);
+
+  // Member table
+  const visibleRows = memberRows.filter((r) => r.completed > 0 || r.noShow > 0 || r.revenue > 0)
+    .sort((a, b) => (b.completed + b.noShow) - (a.completed + a.noShow));
+  if (visibleRows.length === 0) {
+    statsMemberTable.innerHTML = '<div class="saved-list-empty">이번 달 활동 기록이 없습니다.</div>';
+  } else {
+    statsMemberTable.innerHTML = `
+      <table class="stats-table">
+        <thead><tr><th>회원</th><th>완료</th><th>노쇼</th><th>매출</th></tr></thead>
+        <tbody>
+          ${visibleRows.map((r) => `
+            <tr>
+              <td>${escapeHtml(r.name)}</td>
+              <td>${r.completed}</td>
+              <td>${r.noShow}</td>
+              <td>${r.revenue > 0 ? "₩" + r.revenue.toLocaleString() : "—"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+function renderMiniCalendar(monthISO) {
+  const grid = calendarGrid(`${monthISO}-01`);
+  const sessionsByDate = new Map();
+  for (const s of loadSessions()) {
+    const arr = sessionsByDate.get(s.date) || [];
+    arr.push(s);
+    sessionsByDate.set(s.date, arr);
   }
 
-  const memberRows = members
-    .map((m) => {
-      const c = counts.get(m.id) || { completed: 0, noShow: 0 };
-      return { name: m.name, ...c };
+  const headerCells = DAYS.map((d) => `<div class="mini-cal-head">${escapeHtml(d)}</div>`).join("");
+  const cells = grid
+    .map((c) => {
+      const dayCells = sessionsByDate.get(c.iso) || [];
+      const count = dayCells.length;
+      const dotsHtml = count > 0
+        ? `<div class="mini-cal-dots">${
+            dayCells.slice(0, 3).map((s) => {
+              const [bg] = colorForName(s.name);
+              return `<span class="mini-cal-dot" style="background:${bg}"></span>`;
+            }).join("")
+          }${count > 3 ? `<span class="mini-cal-cell-more">+${count - 3}</span>` : ""}</div>`
+        : "";
+      const cls = [
+        "mini-cal-cell",
+        c.isSameMonth ? "" : "is-other-month",
+        c.isToday ? "is-today" : "",
+      ].filter(Boolean).join(" ");
+      return `<button class="${cls}" type="button" data-iso="${c.iso}">
+        <div class="mini-cal-cell-num">${c.day}</div>
+        ${dotsHtml}
+      </button>`;
     })
-    .filter((r) => r.completed > 0 || r.noShow > 0)
-    .sort((a, b) => (b.completed + b.noShow) - (a.completed + a.noShow));
+    .join("");
 
-  statsSheetTitle.textContent = `${formatYearMonth(weekStartISO(todayISO()))} 통계`;
-  statsContent.innerHTML = `
-    <div class="stats-summary">
-      <div class="stats-card">
-        <div class="stats-card-label">총 완료</div>
-        <div class="stats-card-value">${totalCompleted}</div>
-      </div>
-      <div class="stats-card">
-        <div class="stats-card-label">총 노쇼</div>
-        <div class="stats-card-value">${totalNoShow}</div>
-      </div>
-    </div>
-    ${memberRows.length === 0
-      ? '<div class="saved-list-empty">이번 달 완료/노쇼 기록이 없습니다.</div>'
-      : `<table class="stats-table">
-          <thead><tr><th>회원</th><th>완료</th><th>노쇼</th></tr></thead>
-          <tbody>
-            ${memberRows.map((r) => `
-              <tr><td>${escapeHtml(r.name)}</td><td>${r.completed}</td><td>${r.noShow}</td></tr>
-            `).join("")}
-          </tbody>
-        </table>`
-    }
-  `;
+  miniCalEl.innerHTML = headerCells + cells;
+  miniCalEl.querySelectorAll("[data-iso]").forEach((cell) => {
+    cell.addEventListener("click", () => {
+      currentWeekStart = weekStartISO(cell.dataset.iso);
+      refreshCurrentWeek();
+      closeStatsSheet();
+    });
+  });
 }
+
+statsMonthPrev.addEventListener("click", () => {
+  statsMonthISO = monthOfISO(addMonths(`${statsMonthISO}-01`, -1));
+  renderStats();
+});
+statsMonthNext.addEventListener("click", () => {
+  statsMonthISO = monthOfISO(addMonths(`${statsMonthISO}-01`, 1));
+  renderStats();
+});
+statsMonthToday.addEventListener("click", () => {
+  statsMonthISO = monthOfISO(todayISO());
+  renderStats();
+});
 
 // ===== Wiring =====
 

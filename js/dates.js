@@ -117,3 +117,47 @@ export function isSameMonth(isoA, isoB) {
 export function monthOfISO(iso) {
   return iso.slice(0, 7); // "YYYY-MM"
 }
+
+export function monthStartISO(iso) {
+  const d = isoToDate(iso);
+  d.setDate(1);
+  return dateToISO(d);
+}
+
+export function monthEndISO(iso) {
+  const d = isoToDate(iso);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(0);
+  return dateToISO(d);
+}
+
+export function addMonths(iso, n) {
+  const d = isoToDate(iso);
+  d.setMonth(d.getMonth() + n);
+  return dateToISO(d);
+}
+
+/**
+ * 월간 캘린더 그리드 (6주 × 7일 = 42 셀, 월~일 시작).
+ * @param {string} iso "YYYY-MM-DD" (해당 월의 어느 날짜든 OK)
+ * @returns 각 셀 { iso, day, isSameMonth, isToday }
+ */
+export function calendarGrid(iso) {
+  const monthStart = monthStartISO(iso);
+  const target = monthOfISO(monthStart);
+  const start = weekStartISO(monthStart);
+  const today = todayISO();
+  const cells = [];
+  let cur = start;
+  for (let i = 0; i < 42; i++) {
+    const d = isoToDate(cur);
+    cells.push({
+      iso: cur,
+      day: d.getDate(),
+      isSameMonth: monthOfISO(cur) === target,
+      isToday: cur === today,
+    });
+    cur = addDays(cur, 1);
+  }
+  return cells;
+}

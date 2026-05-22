@@ -1,4 +1,4 @@
-const CACHE_NAME = "auto-scheduler-v16";
+const CACHE_NAME = "auto-scheduler-v18";
 const ASSETS = [
   "./",
   "./index.html",
