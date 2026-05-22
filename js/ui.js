@@ -67,6 +67,7 @@ const gridTarget = $("#grid");
 const alertBanner = $("#alert-banner");
 const emptyHint = $("#empty-hint");
 const regenerateButton = $("#regenerate-button");
+const confirmButton = $("#confirm-button");
 const excelButton = $("#excel-button");
 const clearButton = $("#clear-button");
 const openEventModalBtn = $("#open-event-modal-btn");
@@ -691,7 +692,7 @@ function openMemberModal({ memberId = null } = {}) {
   conds.forEach((c) => addMemberConditionRow(c));
 
   memberModal.classList.remove("hidden");
-  setTimeout(() => memberModalName.focus(), 50);
+  // 자동 포커스 제거 — 키패드 자동 열림 방지
 }
 function closeMemberModal() {
   memberModal.classList.add("hidden");
@@ -793,8 +794,10 @@ function refreshCurrentWeek() {
 
 function syncActionButtons() {
   const has = currentWeekSessions.length > 0;
+  const hasGenerated = currentWeekSessions.some((s) => s.source === "generated");
   excelButton.disabled = !has;
   clearButton.disabled = !has;
+  confirmButton.disabled = !hasGenerated;
 }
 
 function updateEmptyState() {
@@ -1003,7 +1006,7 @@ function openEventModal({ sessionId = null } = {}) {
   if (showStatusSection) updateEventModalStatusUI(session.status || "pending");
 
   eventModal.classList.remove("hidden");
-  setTimeout(() => eventModalName.focus(), 50);
+  // 자동 포커스 제거 — 키패드 자동 열림 방지
 
   const mark = (newStatus) => {
     if (!isEdit) return;
@@ -1199,6 +1202,7 @@ function copyPreviousWeek() {
     showToast("지난 주에 일정이 없습니다", { duration: 1500 });
     return;
   }
+  // 복사된 일정은 모두 fixed 처리 → 다음 재생성 시 보호됨
   const newSessions = prevSessions.map((s) => ({
     date: dayNameToISO(currentWeekStart, s.day),
     day: s.day,
@@ -1206,12 +1210,25 @@ function copyPreviousWeek() {
     end: s.end,
     name: s.name,
     member_id: s.member_id,
-    source: s.source,
+    source: "fixed",
     status: "pending",
   }));
   addSessions(newSessions);
   refreshCurrentWeek();
-  showToast(`지난 주 일정 ${newSessions.length}개 복사됨`, { duration: 1800 });
+  showToast(`지난 주 일정 ${newSessions.length}개 복사 (모두 고정)`, { duration: 2000 });
+}
+
+function confirmAllSessions() {
+  const generated = currentWeekSessions.filter((s) => s.source === "generated");
+  if (generated.length === 0) {
+    showToast("확정할 일정이 없습니다", { duration: 1500 });
+    return;
+  }
+  for (const s of generated) {
+    updateSession(s.id, { source: "fixed" });
+  }
+  refreshCurrentWeek();
+  showToast(`${generated.length}개 일정 확정 (고정)`, { duration: 1800 });
 }
 
 // ===== Stats sheet =====
@@ -1281,6 +1298,7 @@ sampleButton.addEventListener("click", applySample);
 regenerateButton.addEventListener("click", () => submitGenerate());
 clearButton.addEventListener("click", clearCurrentWeek);
 copyPrevButton.addEventListener("click", copyPreviousWeek);
+confirmButton.addEventListener("click", confirmAllSessions);
 emptyGenerateBtn.addEventListener("click", () => submitGenerate());
 emptyCopyPrevBtn.addEventListener("click", copyPreviousWeek);
 
